@@ -1,6 +1,6 @@
 from enum import Enum
 
-from error import *
+import error
 from location import Location
 from type import Type
 
@@ -22,7 +22,7 @@ class Literal(Expr):
         # Check that the type is as expected.
         actual_type = Type.get_type(_val)
         if (_type != actual_type):
-            raise TypeError(_loc, _type, actual_type)
+            raise error.UnexpectedType(_loc, _type, actual_type)
 
         # Setup the data.
         self.exprClass = ExprEnum.LITERAL
@@ -36,7 +36,7 @@ class CreateVar(Expr):
         # Check that the type is as expected.
         actual_type = Type.get_type(_val)
         if (_type != actual_type):
-            raise TypeError(_loc, _type, actual_type)
+            raise error.UnexpectedType(_loc, _type, actual_type)
 
         # Setup the data.
         self.exprClass = ExprEnum.CREATE_VAR

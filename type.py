@@ -1,4 +1,6 @@
 from enum import Enum
+import error
+
 
 class Type(Enum):
     INT     = 1
@@ -18,6 +20,18 @@ class Type(Enum):
             return 'unknown'
         else:
             return '(bad parameter to type_to_str())'
+
+
+    def str_to_type(loc, s):
+        if s == 'int':
+            return Type.INT
+        elif s == 'float':
+            return Type.FLOAT
+        elif s == 'string':
+            return Type.STRING
+        else:
+            raise error.InvalidType(loc, s)
+
 
 
     def get_type(v):
