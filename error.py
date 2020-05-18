@@ -34,3 +34,36 @@ class InvalidType(Error):
 
     def __print_end(self):
         print(f'invalid type: {self.invalid_type}')
+
+
+class IncompatibleType(Error):
+    def __init__(self, _loc, _type_name, _val):
+        self.loc = _loc                 # Type Location
+        self.type_name = _type_name     # String like "float", "string", ...
+        self.val = _val                 # String like "4.32", "hi", ...
+
+
+    def __print_end(self):
+        printf(f'"{self.val}" is not of type {self.type_name}')
+
+
+class InvalidExprStart(Error):
+    def __init__(self, _loc, _expected_start, _actual_start):
+        self.loc = _loc                         # Type Location
+        self.expected_start = _expected_start   # Type Type
+        self.actual_start = _actual_start       # Type Type
+
+
+    def __print_end(self):
+        printf(f'expected expression to start with "{self.expected_start}"' + \
+               f'but found "{self.actual_start}" at start')
+
+
+class InternalError(Error):
+    def __init__(self, _loc, _msg):
+        self.loc = _loc     # Type Location
+        self.msg = _msg     # Type string
+
+
+    def __print_end(self):
+        printf(f'{msg}')

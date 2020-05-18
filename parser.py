@@ -49,7 +49,7 @@ class Parser:
             return c
 
 
-    def __parse_word(self):
+    def __parse_word_with_loc(self):
         '''
         Parse a single word, stopping at a whitespace or ')'.
 
@@ -86,9 +86,15 @@ class Parser:
         return (start_point_loc.span(end_point_loc), word)
 
 
+    def __parse_word(self):
+        ''' Parse and return a single word, stopping at a whitespace or ')'. '''
+        (_, word) = self.__parse_word_with_loc()
+        return word
+
+
     def __parse_type(self):
         ''' Private function to parse a single type. '''
-        (loc, word) = self.__parse_word()
+        (loc, word) = self.__parse_word_with_loc()
         return Type.str_to_type(loc, word)
 
 
@@ -99,10 +105,12 @@ class Parser:
             # The end of file was reached
             return
 
-        assert(c == '(')  # TODO: raise error instead
+        if c != '(':
+            loc = self.__get_point_loc(True).span(self.__get_point_loc())
+            raise error.InvalidExprStart(loc, '(', c)
 
         start_point_loc = self.__get_point_loc(prev_col=True)
-        (_, word) = self.__parse_word()
+        word = self.__parse_word()
 
         if word == 'val':
             return self.__parse_create_var(start_point_loc)
@@ -121,19 +129,13 @@ class Parser:
         '''
 
         var_type = self.__parse_type()
-        (_, var_name) = self.__parse_word()
-        (_, var_val) = self.__parse_word()
+        var_name = self.__parse_word()
+        var_val = self.__parse_word()
         end_point_loc = self.__get_point_loc()
         loc = start_point_loc.span(end_point_loc)
 
-        # TODO: add try-except in this if block.
-        if var_type == Type.INT:
-            var_val = int(var_val)
-        elif var_type == Type.FLOAT:
-            var_val = float(var_val)
-        elif var_type == Type.STRING:
-            var_val = str(var_val)
-
+        # Convert the value to the given type.
+        var_val = Type.convert_type(loc, var_type, var_val)
 
         return CreateVar(loc, var_type, var_name, var_val)
 
@@ -152,3 +154,14 @@ class Parser:
                 self._parsed_exprs.append(e)
 
         self._file.close()
+
+        print('got these expressions:')
+        for p in self._parsed_exprs:
+            print(p)
+
+
+def main():
+    p = Parser('example.zb')
+    p.parse()
+
+main()
