@@ -6,10 +6,10 @@ class Error(Exception):
 
     def print(self):
         print(f'type error in {self.loc.to_string()}: ', end='')
-        __print_end(self)
+        self._print_end()
 
 
-    def __print_end(self):
+    def _print_end(self):
         ''' This method should be overwritten in child classes. '''
         print('internal error: __print_end() not overwritten')
 
@@ -21,7 +21,7 @@ class UnexpectedType(Error):
         self.actual_type = _actual_type         # Type Type
 
 
-    def __print_end(self):
+    def _print_end(self):
         print(f'expected type {self.expected_type} but got ' + \
               f'type {self.actual_type}')
 
@@ -32,7 +32,7 @@ class InvalidType(Error):
         self.invalid_type = _invalid_type   # Type string
 
 
-    def __print_end(self):
+    def _print_end(self):
         print(f'invalid type: {self.invalid_type}')
 
 
@@ -43,8 +43,8 @@ class IncompatibleType(Error):
         self.val = _val                 # String like "4.32", "hi", ...
 
 
-    def __print_end(self):
-        printf(f'"{self.val}" is not of type {self.type_name}')
+    def _print_end(self):
+        print(f'"{self.val}" is not of type {self.type_name}')
 
 
 class InvalidExprStart(Error):
@@ -54,9 +54,9 @@ class InvalidExprStart(Error):
         self.actual_start = _actual_start       # Type Type
 
 
-    def __print_end(self):
-        printf(f'expected expression to start with "{self.expected_start}"' + \
-               f'but found "{self.actual_start}" at start')
+    def _print_end(self):
+        print(f'expected expression to start with "{self.expected_start}" ' + \
+              f'but found "{self.actual_start}" at start')
 
 
 class InternalError(Error):
@@ -65,5 +65,5 @@ class InternalError(Error):
         self.msg = _msg     # Type string
 
 
-    def __print_end(self):
-        printf(f'{msg}')
+    def _print_end(self):
+        print(f'internal error: {msg}')

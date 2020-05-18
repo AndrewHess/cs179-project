@@ -12,7 +12,7 @@ class Parser:
     def __init__(self, _filename):
         self.filename = _filename   # Type string
         self._file = None           # Type of open file
-        self._file_line = 0         # Type int; line of current point in file.
+        self._file_line = 1         # Type int; line of current point in file.
         self._file_col = 0          # Type int; column of current point in file.
         self._eof = False           # End of file was reached.
         self._parsed_exprs = []     # Type list of Expr's
@@ -158,10 +158,3 @@ class Parser:
         print('got these expressions:')
         for p in self._parsed_exprs:
             print(p)
-
-
-def main():
-    p = Parser('example.zb')
-    p.parse()
-
-main()

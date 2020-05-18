@@ -59,7 +59,7 @@ class Location:
         ecol = self.end_col
 
         if sline == eline:
-            return f'{file}: line {sline}: columns {sc}-{ec}'
+            return f'{file}: line {sline}: columns {scol}-{ecol}'
 
         return f'{file}: lines {sline}-{eline}'
 

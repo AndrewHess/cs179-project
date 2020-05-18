@@ -19,7 +19,7 @@ class Type(Enum):
         elif t == Type.UNKNOWN:
             return 'unknown'
         else:
-            raise error.InternalError(loc, f'unknown type: {t}')
+            raise error.InternalError(loc, f'type_to_str: unknown type: {t}')
 
 
     def str_to_type(loc, s):
@@ -66,7 +66,8 @@ class Type(Enum):
             elif type_enum == Type.STRING:
                 return str(val)
             else:
-                raise error.InternalError(loc, f'unknown type {type_enum}')
+                error_str = f'convert_type: unknown type {type_enum}'
+                raise error.InternalError(loc, error_str)
         except ValueError:
             type_str = Type.type_to_str(loc, type_enum)
             raise error.IncompatibleType(loc, type_str, val)
