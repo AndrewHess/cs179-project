@@ -28,34 +28,28 @@ class Literal(Expr):
     def __init__(self, _loc, _type, _val):
         self._check_type(_loc, _type, _val)
 
-        # Setup the data.
         self.exprClass = ExprEnum.LITERAL
         self.loc = _loc     # Type Location
         self.type = _type   # Type Type
-        self.val = _val     # Type corresponding to _type
+        self.val = _val     # Type _type
 
 
 class CreateVar(Expr):
     def __init__(self, _loc, _type, _name, _val):
-        self._check_type(_loc, _type, _val)
-
-        # Setup the data.
         self.exprClass = ExprEnum.CREATE_VAR
         self.loc = _loc     # Type Location
         self.type = _type   # Type Type
         self.name = _name   # Type string
-        self.val = _val     # Type corresponding to _type
+        self.val = _val     # Type Expr
 
 
 class SetVar(Expr):
     def __init__(self, _loc, _type, _name, _val):
-        self._check_type(_loc, _type, _val)
-
         self.exprClass = ExprEnum.SET_VAR
         self.loc = _loc     # Type Location
         self.type = _type   # Type Type; the type of _val
         self.name = _name   # Type string
-        self.val = _val
+        self.val = _val     # Type Expr
 
 
 class GetVar(Expr):
@@ -63,7 +57,7 @@ class GetVar(Expr):
         self.exprClass = ExprEnum.GET_VAR
         self.loc = _loc     # Type Location
         self.name = _name   # Type string
-        self.type = None    # This is determined by a previous CREATE_VAR expr.
+        self.type = None    # Type is determined by a previous CREATE_VAR expr
 
 
 class Define(Expr):
@@ -82,3 +76,4 @@ class Call(Expr):
         self.loc = _loc         # Type Location
         self.name = _name       # Type string
         self.params = _params   # Type list of Expr's
+        self.return_type = None # Type is determined by a previous DEFINE expr

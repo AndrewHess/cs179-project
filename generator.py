@@ -10,116 +10,170 @@ class Generator:
         self.in_filename = _in_filename
         self.out_filename = _out_filename
         self._out_file = None    # The result from open(_out_filename)
+        self._indent_jump = 4    # The number of spaces a single indent uses
+        self._indent = ''        # String of spaces for indenting output code
+
+
+    def _increase_indent(self):
+        self._indent += ' ' * self._indent_jump
+
+
+    def _decrease_indent(self):
+        new_indent_len = len(self._indent) - self._indent_jump
+        self._indent = self._indent[:new_indent_len]
+
+
+    def _make_indented(self, code):
+        '''
+        Takes a string and returns a new string where 'self._indent' is added
+        to the beginning of every non-emtpy line.
+        '''
+
+        indented = self._indent
+        for (i, c) in enumerate(code[:-1]):
+            indented += c
+
+            if c == '\n' and code[i + 1] != '\n':
+                indented += self._indent
+
+        if len(code) > 0:
+            indented += code[-1]
+
+        return indented
 
 
     def __translate_expr(self, expr):
-        ''' Get a single parsed expression and write the equivalent C++ and
+        ''' Get a single parsed expression and return the equivalent C++ and
             CUDA code to the output file.
         '''
         if expr.exprClass == ExprEnum.LITERAL:
-            self.__translate_literal_expr(expr)
+            return self.__translate_literal_expr(expr)
         elif expr.exprClass == ExprEnum.CREATE_VAR:
-            self.__translate_create_var_expr(expr)
+            return self.__translate_create_var_expr(expr)
         elif expr.exprClass == ExprEnum.SET_VAR:
-            self.__translate_set_var_expr(expr)
+            return self.__translate_set_var_expr(expr)
         elif expr.exprClass == ExprEnum.GET_VAR:
-            self.__translate_get_var_expr(expr)
+            return self.__translate_get_var_expr(expr)
         elif expr.exprClass == ExprEnum.DEFINE:
-            self.__translate_define_expr(expr)
+            return self.__translate_define_expr(expr)
         elif expr.exprClass == ExprEnum.CALL:
-            self.__translate_call_expr(expr)
+            return self.__translate_call_expr(expr)
 
 
     def __translate_literal_expr(self, expr):
-        ''' Get a single parsed LITERAL expression and write the equivalent
+        ''' Get a single parsed LITERAL expression and return the equivalent
             C++ and CUDA code to the output file.
         '''
 
-        code = ''
+        cpp = ''
+        cuda = ''
         if expr.type == Type.STRING:
-            code = f'"{expr.val}" '
+            cpp = f'"{expr.val}"'
         else:
-            code = f'{expr.val} '
+            cpp = f'{expr.val}'
 
-        self._out_file.write(code)
-        return
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
 
 
     def __translate_create_var_expr(self, expr):
-        ''' Get a single parsed CREATE_VAR expression and write the equivalent
+        ''' Get a single parsed CREATE_VAR expression and return the equivalent
             C++ and CUDA code to the output file.
         '''
 
-        code = ''
+        cpp = ''
+        cuda = ''
         if expr.type == Type.INT:
-            code = f'int {expr.name} = {expr.val};\n'
+            (c, _) = self.__translate_expr(expr.val)
+            cpp = f'int {expr.name} = {c};\n'
         elif expr.type == Type.FLOAT:
-            code = f'float {expr.name} = {expr.val};\n'
+            (c, _) = self.__translate_expr(expr.val)
+            cpp = f'float {expr.name} = {c};\n'
         elif expr.type == Type.STRING:
-            size = len(expr.val) + 1  # Add 1 for the null terminator.
-            code = f'\nchar *{expr.name} = malloc({size});\n' + \
-                   f'if ({expr.name} == NULL) {"{"}\n' + \
-                   f'    printf("failed to allocate {size} bytes\\n");\n' + \
-                   f'    exit(1);\n' + \
-                   f'{"}"}\n' + \
-                   f'*{expr.name} = "{expr.val}";\n\n'
+            if expr.val.exprClass == ExprEnum.LITERAL:
+                size = len(expr.val.val) + 1  # Add 1 for the null terminator.
+                cpp = f'\nchar *{expr.name} = malloc({size});\n' + \
+                      f'if ({expr.name} == NULL) {"{"}\n' + \
+                      f'    printf("failed to allocate {size} bytes\\n");\n' + \
+                      f'    exit(1);\n' + \
+                      f'{"}"}\n' + \
+                      f'*{expr.name} = "{expr.val.val}";\n\n'
+            elif expr.val.exprClass == ExprEnum.GET_VAR or \
+                 expr.val.exprClass == ExprEnum.CALL:
+                (c, _) = self.__translate_expr(expr.val)
+                cpp = f'char *{expr.name} = {c};\n'
+            else:
+                raise error.Syntax(expr.loc, 'invalid string initialization')
 
-        self._out_file.write(code)
-        return
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
 
 
     def __translate_set_var_expr(self, expr):
-        ''' Get a single parsed SET_VAR expression and write the equivalent
+        ''' Get a single parsed SET_VAR expression and return the equivalent
             C++ and CUDA code to the output file.
         '''
 
-        code = ''
-        if expr.type == Type.STRING:
-            size = len(expr.val) + 1  # Add 1 for the null terminator.
-            code = f'if (realloc({expr.name}, size) == NULL) {"{"}\n' + \
-                   f'    printf("failed to get space for {size} bytes\\n");\n' + \
-                   f'    exit(1);\n' + \
-                   f'{"}"}\n' + \
-                   f'*{expr.name} = {expr.val};\n\n'
-        else:
-            code = f'{expr.name} = {expr.val};\n'
+        cpp = ''
+        cuda = ''
 
-        self._out_file.write(code)
-        return
+        if expr.type == None:
+            print('bad type in __translate_set_var_expr!!!')
+
+        if expr.type == Type.STRING:
+            # TODO: use pointer from realloc if not null.
+            size = len(expr.val.val) + 1  # Add 1 for the null terminator.
+            cpp = f'if (realloc({expr.name}, size) == NULL) {"{"}\n' + \
+                  f'    printf("failed to get space for {size} bytes\\n");\n' + \
+                  f'    exit(1);\n' + \
+                  f'{"}"}\n' + \
+                  f'*{expr.name} = {expr.val};\n\n'
+        else:
+            (c, _) = self.__translate_expr(expr.val)
+            cpp = f'{expr.name} = {c};\n'
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
 
 
     def __translate_get_var_expr(self, expr):
-        ''' Get a single parsed GET_VAR expression and write the equivalent
+        ''' Get a single parsed GET_VAR expression and return the equivalent
             C++ and CUDA code to the output file.
         '''
 
-        self._out_file.write(f'{expr.name} ')
-        return
+        cpp = f'{expr.name}'
+        cuda = ''
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
 
 
     def __translate_define_expr(self, expr):
-        ''' Get a single parsed DEFINE expression and write the equivalent
+        ''' Get a single parsed DEFINE expression and return the equivalent
             C++ and CUDA code to the output file.
         '''
 
+        cpp = ''
+        cuda = ''
+
         return_type = Type.enum_to_c_type(expr.loc, expr.return_type)
-        code = f'{return_type} {expr.name} ('
+        cpp = f'{return_type} {expr.name} ('
 
         # Add the parameters.
         for (arg_type, arg_name) in expr.args[:-1]:
-            code += f'{Type.enum_to_c_type(expr.loc, arg_type)} {arg_name}, '
+            cpp += f'{Type.enum_to_c_type(expr.loc, arg_type)} {arg_name}, '
 
         # The last parameter is a little different.
         if len(expr.args) > 0:
             (arg_type, arg_name) = expr.args[-1]
-            code += f'{Type.enum_to_c_type(expr.loc, arg_type)} {arg_name}'
-        code += ') {\n'
-
-        self._out_file.write(code)
+            cpp += f'{Type.enum_to_c_type(expr.loc, arg_type)} {arg_name}'
+        cpp += ') {\n'
 
         # Add the body of the function.
+        body_cpp = ''
         for e in expr.body[:-1]:
-            self.__translate_expr(e)
+            (c, _) = self.__translate_expr(e)
+            body_cpp += c
 
         # The last expression should be returned.
         if len(expr.body) == 0:
@@ -127,25 +181,47 @@ class Generator:
             raise error.Syntax(expr.loc, error_str)
 
         e = expr.body[-1]
-        if e.exprClass != ExprEnum.LITERAL and e.exprClass != ExprEnum.GET_VAR:
-            error_str = 'expected literal or variable as last body expression'
+        if e.exprClass != ExprEnum.LITERAL and \
+           e.exprClass != ExprEnum.GET_VAR and \
+           e.exprClass != ExprEnum.CALL:
+            error_str = 'expected literal, get, or call as last body expression'
             raise error.Syntax(expr.loc, error_str)
 
-        self._out_file.write('return ')
-        self.__translate_expr(e);
-        self._out_file.write(';\n}\n\n')
+        (c, _) = self.__translate_expr(e)
+        body_cpp += f'return {c};\n'
 
-        return
+        self._increase_indent()
+        body_cpp = self._make_indented(body_cpp)
+        self._decrease_indent()
+
+        cpp = self._make_indented(cpp)
+        cpp = cpp + body_cpp + self._make_indented('}\n\n')
+
+        return (cpp, cuda)
 
 
     def __translate_call_expr(self, expr):
-        ''' Get a single parsed CALL expression and write the equivalent
+        ''' Get a single parsed CALL expression and return the equivalent
             C++ and CUDA code to the output file.
         '''
 
-        return
+        cpp = f'{expr.name}('
+        cuda = ''
 
+        # Add the arguments.
+        for e in expr.params[:-1]:
+            (c, _) = self.__translate_expr(e)
+            cpp += f'{c}, '
 
+        # The last argument should not have a following comma.
+        if len(expr.params) > 0:
+            (c, _) = self.__translate_expr(expr.params[-1])
+            cpp += f'{c}'
+
+        cpp += ');\n'
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
 
 
     def generate(self):
@@ -162,17 +238,23 @@ class Generator:
             e.print()
             exit(1)
 
+        # Include some useful libraries.
+        self._out_file = open(self.out_filename, 'w')
+        self._out_file.write('#include <stdio.h>\n')
+        self._out_file.write('#include <stdlib.h>\n')
+        self._out_file.write('\n')
+
         # Convert each expression to C++ and CUDA code, writing the result to
         # the output file.
-        self._out_file = open(self.out_filename, 'w')
         for expr in parsed_exprs:
-            self.__translate_expr(expr)
+            (cpp, cuda) = self.__translate_expr(expr)
+            self._out_file.write(cpp)
 
         self._out_file.close()
 
 
 def main():
-    g = Generator('example.zb', 'example.cpp')
+    g = Generator('examples/example3.zb', 'examples/example3.cpp')
     g.generate()
 
 main()

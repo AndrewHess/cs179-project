@@ -188,11 +188,19 @@ class Parser:
 
         var_type = self.__parse_type()
         var_name = self.__parse_word()
-        var_val = self.__parse_word()
+        var_val = self.__parse_expr()
+
+        # Read the final ')'.
+        var_end = self._file.read(1)
+        self._file_col += 1
+
         loc = start_point_loc.span(self.__get_point_loc())
 
-        # Convert the value to the given type.
-        var_val = Type.convert_type(loc, var_type, var_val)
+        if var_end != ')':
+            raise error.Syntax(loc, f'expected ")" but got "{var_end}"')
+
+        # # Convert the value to the given type.
+        # var_val = Type.convert_type(loc, var_type, var_val)
 
         return CreateVar(loc, var_type, var_name, var_val)
 
@@ -208,12 +216,21 @@ class Parser:
         '''
 
         set_name = self.__parse_word()
-        set_val = self.__parse_word()
+        set_val = self.__parse_expr()
+
+        # Read the final ')'.
+        set_end = self._file.read(1)
+        self._file_col += 1
+
         loc = start_point_loc.span(self.__get_point_loc())
 
-        # Convert the value to the correct type.
-        set_type = Type.get_type_from_string_val(loc, set_val)
-        set_val = Type.convert_type(loc, set_type, set_val)
+        if set_end != ')':
+            raise error.Syntax(loc, f'expected ")" but got "{set_end}"')
+
+        # # Convert the value to the correct type.
+        # set_type = Type.get_type_from_string_val(loc, set_val)
+        # set_val = Type.convert_type(loc, set_type, set_val)
+        set_type = None
 
         return SetVar(loc, set_type, set_name, set_val)
 
@@ -235,8 +252,9 @@ class Parser:
         # Parse the ':' between function name and start of arguments.
         c = self.__eat_whitespace()
         if c == '':
-            # The end of file was reached
-            return
+            # The end of file was reached.
+            loc = self.__get_point_loc(True).span(self.__get_point_loc())
+            raise error.Syntax(loc, f'unexpected end of file')
 
         if c != ':':
             loc = self.__get_point_loc(True).span(self.__get_point_loc())
@@ -287,6 +305,18 @@ class Parser:
         call_name = self.__parse_word()
         call_params = []
 
+        # Parse the ':' between function name and start of arguments.
+        c = self.__eat_whitespace()
+        if c == '':
+            # The end of file was reached.
+            loc = self.__get_point_loc(True).span(self.__get_point_loc())
+            raise error.Syntax(loc, f'unexpected end of file')
+
+        if c != ':':
+            loc = self.__get_point_loc(True).span(self.__get_point_loc())
+            raise error.Syntax(loc, f'expected ":" but found "{c}"')
+
+        # Parse the argumnts, if any.
         while True:
             e = self.__parse_expr(parsing_exprs_list=True)
 
