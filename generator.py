@@ -3,6 +3,25 @@ from expr import ExprEnum
 from parser import Parser
 from type import Type
 
+# Map from primitive binary function name to the cpp equivalent function name.
+prim_binary_funcs = {'+': '+',
+                     '-': '-',
+                     '*': '*',
+                     '/': '/',
+                     '%': '%',
+                     '>': '>',
+                     '>=': '>=',
+                     '<': '<',
+                     '<=': '<=',
+                     '==': '==',
+                     '!=': '!=',
+                     'or': '||',
+                     'and': '&&'}
+
+# Map from other primitive functions to the cpp equivalent.
+prim_other_funcs = {'print': 'printf',
+                    'not': '!'}
+
 
 class Generator:
     ''' A class to read parsed code and output C++ and CUDA code. '''
@@ -177,7 +196,7 @@ class Generator:
         cuda = ''
 
         return_type = Type.enum_to_c_type(expr.loc, expr.return_type)
-        cpp = f'{return_type} {expr.name} ('
+        cpp = f'{return_type} {expr.name}('
 
         # Add the parameters.
         for (arg_type, arg_name) in expr.args[:-1]:
@@ -223,6 +242,62 @@ class Generator:
     def __translate_call_expr(self, expr, end=True):
         ''' Get a single parsed CALL expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        if expr.name in prim_binary_funcs:
+            return self.__translate_call_prim_binary_expr(expr, end)
+        elif expr.name in prim_other_funcs:
+            return self.__translate_call_prim_other_expr(expr, end)
+        else:
+            return self.__translate_call_user_expr(expr, end)
+
+
+    def __translate_call_prim_binary_expr(self, expr, end=True):
+        ''' Get a single parsed CALL expression for a primitive binary function
+            and return the equivalent C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        cpp = ''
+        cuda = ''
+
+        if len(expr.params) != 2:
+            error_str = f'expected 2 arguments but got {len(expr.params)}'
+            raise error.Syntax(expr.loc, error_str)
+
+        cpp += '('
+        cpp += f'{self.__translate_expr(expr.params[0], False)[0]}'
+        cpp += f' {prim_binary_funcs[expr.name]} '
+        cpp += f'{self.__translate_expr(expr.params[1], False)[0]}'
+        cpp += ')'
+
+        cpp += ';\n' if end else ''
+        cpp = self._make_indented(cpp)
+
+        return (cpp, cuda)
+
+
+    def __translate_call_prim_other_expr(self, expr, end=True):
+        ''' Get a single parsed CALL expression for a primitive (but not
+            primitive binary) function and return the equivalent C++ and CUDA
+            code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        expr.name = prim_other_funcs[expr.name]
+        return self.__translate_call_user_expr(expr, end)
+
+
+    def __translate_call_user_expr(self, expr, end=True):
+        ''' Get a single parsed CALL expression for a user defined function
+            and return the equivalent C++ and CUDA code to the output file.
 
             If 'end' is false, then the final characters of the expression,
             like semi-colons and newlines, are not added.
@@ -278,7 +353,7 @@ class Generator:
 
 
 def main():
-    g = Generator('examples/example3.zb', 'examples/example3.cpp')
+    g = Generator('examples/example4.zb', 'examples/example4.cpp')
     g.generate()
 
 main()
