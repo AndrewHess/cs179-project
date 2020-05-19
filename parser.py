@@ -1,5 +1,5 @@
 import error
-from exprs import *
+from expr import *
 from location import *
 from type import Type
 
@@ -119,7 +119,7 @@ class Parser:
 
         if c != '(':
             loc = self.__get_point_loc(True).span(self.__get_point_loc())
-            raise error.Syntax(loc, '"("', '"' + c + '"')
+            raise error.Syntax(loc, f'expected "(" but found "{c}"')
 
         start_point_loc = self.__get_point_loc(prev_col=True)
         word = self.__parse_word()
@@ -154,7 +154,7 @@ class Parser:
         loc = start_point_loc.span(self.__get_point_loc())
 
         # Convert the value to the correct type.
-        lit_type = Type.get_type(lit_val)
+        lit_type = Type.get_type_from_string_val(loc, lit_val)
         lit_val = Type.convert_type(loc, lit_type, lit_val)
 
         return Literal(loc, lit_type, lit_val)
@@ -212,7 +212,7 @@ class Parser:
         loc = start_point_loc.span(self.__get_point_loc())
 
         # Convert the value to the correct type.
-        set_type = Type.get_type(set_val)
+        set_type = Type.get_type_from_string_val(loc, set_val)
         set_val = Type.convert_type(loc, set_type, set_val)
 
         return SetVar(loc, set_type, set_name, set_val)
@@ -240,7 +240,7 @@ class Parser:
 
         if c != ':':
             loc = self.__get_point_loc(True).span(self.__get_point_loc())
-            raise error.Syntax(loc, '":"', '"' + c + '"')
+            raise error.Syntax(loc, f'expected ":" but found "{c}"')
 
         # Parse the arguments.
         def_args = []
@@ -315,6 +315,4 @@ class Parser:
 
         self._file.close()
 
-        print('got these expressions:')
-        for p in self._parsed_exprs:
-            print(p)
+        return self._parsed_exprs

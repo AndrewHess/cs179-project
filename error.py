@@ -1,5 +1,6 @@
 from location import Location
 
+
 class Error(Exception):
     ''' Base class for errors. '''
     loc = None  # Type Location
@@ -48,15 +49,13 @@ class IncompatibleType(Error):
 
 
 class Syntax(Error):
-    def __init__(self, _loc, _expected_start, _actual_start):
-        self.loc = _loc                         # Type Location
-        self.expected_start = _expected_start   # Type string
-        self.actual_start = _actual_start       # Type string
+    def __init__(self, _loc, _msg):
+        self.loc = _loc     # Type Location
+        self.msg = _msg     # Type string
 
 
     def _print_end(self):
-        print(f'invalid syntax: expected {self.expected_start} ' + \
-              f'but found {self.actual_start}')
+        print(f'invalid syntax: {self.msg}')
 
 
 class InternalError(Error):
@@ -66,4 +65,4 @@ class InternalError(Error):
 
 
     def _print_end(self):
-        print(f'internal error: {msg}')
+        print(f'internal error: {self.msg}')

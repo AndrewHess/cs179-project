@@ -19,7 +19,7 @@ class Expr:
 
     def _check_type(self, loc, t, v):
         # Check that the type is as expected.
-        actual_type = Type.get_type(v)
+        actual_type = Type.get_type(loc, v)
         if (t != actual_type):
             raise error.UnexpectedType(loc, t, actual_type)
 
