@@ -42,27 +42,33 @@ class Generator:
         return indented
 
 
-    def __translate_expr(self, expr):
+    def __translate_expr(self, expr, end=True):
         ''' Get a single parsed expression and return the equivalent C++ and
             CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
         if expr.exprClass == ExprEnum.LITERAL:
-            return self.__translate_literal_expr(expr)
+            return self.__translate_literal_expr(expr, end)
         elif expr.exprClass == ExprEnum.CREATE_VAR:
-            return self.__translate_create_var_expr(expr)
+            return self.__translate_create_var_expr(expr, end)
         elif expr.exprClass == ExprEnum.SET_VAR:
-            return self.__translate_set_var_expr(expr)
+            return self.__translate_set_var_expr(expr, end)
         elif expr.exprClass == ExprEnum.GET_VAR:
-            return self.__translate_get_var_expr(expr)
+            return self.__translate_get_var_expr(expr, end)
         elif expr.exprClass == ExprEnum.DEFINE:
-            return self.__translate_define_expr(expr)
+            return self.__translate_define_expr(expr, end)
         elif expr.exprClass == ExprEnum.CALL:
-            return self.__translate_call_expr(expr)
+            return self.__translate_call_expr(expr, end)
 
 
-    def __translate_literal_expr(self, expr):
+    def __translate_literal_expr(self, expr, end=True):
         ''' Get a single parsed LITERAL expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
 
         cpp = ''
@@ -76,18 +82,21 @@ class Generator:
         return (cpp, cuda)
 
 
-    def __translate_create_var_expr(self, expr):
+    def __translate_create_var_expr(self, expr, end=True):
         ''' Get a single parsed CREATE_VAR expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
 
         cpp = ''
         cuda = ''
         if expr.type == Type.INT:
-            (c, _) = self.__translate_expr(expr.val)
+            (c, _) = self.__translate_expr(expr.val, False)
             cpp = f'int {expr.name} = {c};\n'
         elif expr.type == Type.FLOAT:
-            (c, _) = self.__translate_expr(expr.val)
+            (c, _) = self.__translate_expr(expr.val, False)
             cpp = f'float {expr.name} = {c};\n'
         elif expr.type == Type.STRING:
             if expr.val.exprClass == ExprEnum.LITERAL:
@@ -100,7 +109,7 @@ class Generator:
                       f'*{expr.name} = "{expr.val.val}";\n\n'
             elif expr.val.exprClass == ExprEnum.GET_VAR or \
                  expr.val.exprClass == ExprEnum.CALL:
-                (c, _) = self.__translate_expr(expr.val)
+                (c, _) = self.__translate_expr(expr.val, False)
                 cpp = f'char *{expr.name} = {c};\n'
             else:
                 raise error.Syntax(expr.loc, 'invalid string initialization')
@@ -109,9 +118,12 @@ class Generator:
         return (cpp, cuda)
 
 
-    def __translate_set_var_expr(self, expr):
+    def __translate_set_var_expr(self, expr, end=True):
         ''' Get a single parsed SET_VAR expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
 
         cpp = ''
@@ -127,18 +139,23 @@ class Generator:
                   f'    printf("failed to get space for {size} bytes\\n");\n' + \
                   f'    exit(1);\n' + \
                   f'{"}"}\n' + \
-                  f'*{expr.name} = {expr.val};\n\n'
+                  f'*{expr.name} = {expr.val}'
+            cpp += ';\n\n' if end else ''
         else:
-            (c, _) = self.__translate_expr(expr.val)
-            cpp = f'{expr.name} = {c};\n'
+            (c, _) = self.__translate_expr(expr.val, False)
+            cpp = f'{expr.name} = {c}'
+            cpp += ';\n' if end else ''
 
         cpp = self._make_indented(cpp)
         return (cpp, cuda)
 
 
-    def __translate_get_var_expr(self, expr):
+    def __translate_get_var_expr(self, expr, end=True):
         ''' Get a single parsed GET_VAR expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
 
         cpp = f'{expr.name}'
@@ -148,9 +165,12 @@ class Generator:
         return (cpp, cuda)
 
 
-    def __translate_define_expr(self, expr):
+    def __translate_define_expr(self, expr, end=True):
         ''' Get a single parsed DEFINE expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
 
         cpp = ''
@@ -172,7 +192,7 @@ class Generator:
         # Add the body of the function.
         body_cpp = ''
         for e in expr.body[:-1]:
-            (c, _) = self.__translate_expr(e)
+            (c, _) = self.__translate_expr(e, True)
             body_cpp += c
 
         # The last expression should be returned.
@@ -187,7 +207,7 @@ class Generator:
             error_str = 'expected literal, get, or call as last body expression'
             raise error.Syntax(expr.loc, error_str)
 
-        (c, _) = self.__translate_expr(e)
+        (c, _) = self.__translate_expr(e, False)
         body_cpp += f'return {c};\n'
 
         self._increase_indent()
@@ -200,9 +220,12 @@ class Generator:
         return (cpp, cuda)
 
 
-    def __translate_call_expr(self, expr):
+    def __translate_call_expr(self, expr, end=True):
         ''' Get a single parsed CALL expression and return the equivalent
             C++ and CUDA code to the output file.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
         '''
 
         cpp = f'{expr.name}('
@@ -210,15 +233,16 @@ class Generator:
 
         # Add the arguments.
         for e in expr.params[:-1]:
-            (c, _) = self.__translate_expr(e)
+            (c, _) = self.__translate_expr(e, False)
             cpp += f'{c}, '
 
         # The last argument should not have a following comma.
         if len(expr.params) > 0:
-            (c, _) = self.__translate_expr(expr.params[-1])
+            (c, _) = self.__translate_expr(expr.params[-1], False)
             cpp += f'{c}'
 
-        cpp += ');\n'
+        cpp += ')'
+        cpp += ';\n' if end else ''
 
         cpp = self._make_indented(cpp)
         return (cpp, cuda)
