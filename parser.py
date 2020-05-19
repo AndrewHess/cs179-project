@@ -98,24 +98,82 @@ class Parser:
         return Type.str_to_type(loc, word)
 
 
-    def __parse_expr(self):
-        ''' Private function to parse a single expression. '''
+    def __parse_expr(self, parsing_exprs_list=False):
+        '''
+        Private function to parse a single expression.
+
+        If parsing_exprs_list is true, then reading the next non-whitespace
+        character as ')' causes this function to return None, indicating that
+        there are no more expressions in the list. If parsing_exprs_list is
+        false and a ')' is read, an error occurs indicating invalid syntax.
+        '''
+
         c = self.__eat_whitespace()
         if c == '':
             # The end of file was reached
             return
 
+        if parsing_exprs_list and c == ')':
+            # The end of the expression list has been reached.
+            return None
+
         if c != '(':
             loc = self.__get_point_loc(True).span(self.__get_point_loc())
-            raise error.InvalidExprStart(loc, '(', c)
+            raise error.Syntax(loc, '"("', '"' + c + '"')
 
         start_point_loc = self.__get_point_loc(prev_col=True)
         word = self.__parse_word()
 
-        if word == 'val':
+        if word == 'lit':
+            return self.__parse_literal(start_point_loc)
+        elif word == 'get':
+            return self.__parse_get_var(start_point_loc)
+        elif word == 'val':
             return self.__parse_create_var(start_point_loc)
+        elif word == 'set':
+            return self.__parse_set_var(start_point_loc)
+        elif word == 'define':
+            return self.__parse_define(start_point_loc)
+        elif word == 'call':
+            return self.__parse_call(start_point_loc)
         else:
             print(f'unknown word: "{word}"')
+
+
+    def __parse_literal(self, start_point_loc):
+        '''
+        Private function to parse a single LITERAL expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<val>)'
+        That is, the '(lit ' section has alread been read.
+
+        Returns an instance of Literal()
+        '''
+
+        lit_val = self.__parse_word()
+        loc = start_point_loc.span(self.__get_point_loc())
+
+        # Convert the value to the correct type.
+        lit_type = Type.get_type(lit_val)
+        lit_val = Type.convert_type(loc, lit_type, lit_val)
+
+        return Literal(loc, lit_type, lit_val)
+
+
+    def __parse_get_var(self, start_point_loc):
+        '''
+        Private function to parse a single GET_VAR expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<name>)'
+        That is, the '(get ' section has alread been read.
+
+        Returns an instance of GetVar()
+        '''
+
+        get_name = self.__parse_word()
+        loc = start_point_loc.span(self.__get_point_loc())
+
+        return GetVar(loc, get_name)
 
 
     def __parse_create_var(self, start_point_loc):
@@ -131,13 +189,115 @@ class Parser:
         var_type = self.__parse_type()
         var_name = self.__parse_word()
         var_val = self.__parse_word()
-        end_point_loc = self.__get_point_loc()
-        loc = start_point_loc.span(end_point_loc)
+        loc = start_point_loc.span(self.__get_point_loc())
 
         # Convert the value to the given type.
         var_val = Type.convert_type(loc, var_type, var_val)
 
         return CreateVar(loc, var_type, var_name, var_val)
+
+
+    def __parse_set_var(self, start_point_loc):
+        '''
+        Private function to parse a single SET_VAR expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<name> <val>)'
+        That is, the '(set ' section has alread been read.
+
+        Returns an instance of SetVar()
+        '''
+
+        set_name = self.__parse_word()
+        set_val = self.__parse_word()
+        loc = start_point_loc.span(self.__get_point_loc())
+
+        # Convert the value to the correct type.
+        set_type = Type.get_type(set_val)
+        set_val = Type.convert_type(loc, set_type, set_val)
+
+        return SetVar(loc, set_type, set_name, set_val)
+
+
+    def __parse_define(self, start_point_loc):
+        '''
+        Private function to parse a single DEFINE expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<name> (<arg1> <arg2> ...) <body1> <body2> ...)'
+        That is, the '(define ' section has alread been read.
+
+        Returns an instance of Define()
+        '''
+
+        # Get the return type and function name.
+        def_return_type = self.__parse_type()
+        def_name = self.__parse_word()
+
+        # Parse the ':' between function name and start of arguments.
+        c = self.__eat_whitespace()
+        if c == '':
+            # The end of file was reached
+            return
+
+        if c != ':':
+            loc = self.__get_point_loc(True).span(self.__get_point_loc())
+            raise error.Syntax(loc, '":"', '"' + c + '"')
+
+        # Parse the arguments.
+        def_args = []
+
+        while True:
+            (l, maybe_type) = self.__parse_word_with_loc()
+
+            # Check if the end of the arguments has been reached.
+            if maybe_type == ':':
+                break
+
+            # There is another argument to parse.
+            arg_type = Type.str_to_type(l, maybe_type)
+            arg_name = self.__parse_word()
+
+            def_args.append((arg_type, arg_name))
+
+        # Parse the body expressions.
+        def_body = []
+
+        while True:
+            e = self.__parse_expr(parsing_exprs_list=True)
+
+            if e is None:
+                break
+
+            def_body.append(e)
+
+        # Now the entire function has been parsed.
+        loc = start_point_loc.span(self.__get_point_loc())
+        return Define(loc, def_return_type, def_name, def_args, def_body)
+
+
+    def __parse_call(self, start_point_loc):
+        '''
+        Private function to parse a single CALL expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<name> <arg1_expr> <arg2_expr> ...)
+        That is, the '(define ' section has alread been read.
+
+        Returns an instance of Call()
+        '''
+
+        call_name = self.__parse_word()
+        call_params = []
+
+        while True:
+            e = self.__parse_expr(parsing_exprs_list=True)
+
+            if e is None:
+                break
+
+            call_params.append(e)
+
+        # Now the entire call has been parsed.
+        loc = start_point_loc.span(self.__get_point_loc())
+        return Call(loc, call_name, call_params)
 
 
     def parse(self):

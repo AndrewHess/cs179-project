@@ -47,16 +47,16 @@ class IncompatibleType(Error):
         print(f'"{self.val}" is not of type {self.type_name}')
 
 
-class InvalidExprStart(Error):
+class Syntax(Error):
     def __init__(self, _loc, _expected_start, _actual_start):
         self.loc = _loc                         # Type Location
-        self.expected_start = _expected_start   # Type Type
-        self.actual_start = _actual_start       # Type Type
+        self.expected_start = _expected_start   # Type string
+        self.actual_start = _actual_start       # Type string
 
 
     def _print_end(self):
-        print(f'expected expression to start with "{self.expected_start}" ' + \
-              f'but found "{self.actual_start}" at start')
+        print(f'invalid syntax: expected {self.expected_start} ' + \
+              f'but found {self.actual_start}')
 
 
 class InternalError(Error):
