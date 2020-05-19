@@ -12,6 +12,7 @@ class ExprEnum(Enum):
     GET_VAR    = 4
     DEFINE     = 5
     CALL       = 6
+    IF         = 7
 
 
 class Expr:
@@ -77,3 +78,12 @@ class Call(Expr):
         self.name = _name       # Type string
         self.params = _params   # Type list of Expr's
         self.return_type = None # Type is determined by a previous DEFINE expr
+
+
+class If(Expr):
+    def __init__(self, _loc, _cond, _then, _otherwise):
+        self.exprClass = ExprEnum.IF
+        self.loc = _loc                 # Type Location
+        self.cond = _cond               # Type Expr
+        self.then = _then               # Type List of Expr's
+        self.otherwise = _otherwise     # Type List of Expr's

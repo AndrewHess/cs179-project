@@ -5,7 +5,7 @@ from type import Type
 
 
 # Keywords cannot be used for function/variable names etc.
-keywords = ['val', 'set', 'define', 'call']
+keywords = ['lit', 'val', 'set', 'get', 'define', 'call', 'if', 'then', 'else']
 
 
 class Parser:
@@ -106,14 +106,10 @@ class Parser:
         return Type.str_to_type(loc, word)
 
 
-    def __parse_expr(self, parsing_exprs_list=False):
+    def __parse_expr_or_keyword(self):
         '''
-        Private function to parse a single expression.
-
-        If parsing_exprs_list is true, then reading the next non-whitespace
-        character as ')' causes this function to return None, indicating that
-        there are no more expressions in the list. If parsing_exprs_list is
-        false and a ')' is read, an error occurs indicating invalid syntax.
+        Private function to parse and return a single expression or a keyword.
+        Returns either a parsed expression or a string keyword.
         '''
 
         c = self.__eat_whitespace()
@@ -121,13 +117,49 @@ class Parser:
             # The end of file was reached
             return
 
-        if parsing_exprs_list and c == ')':
-            # The end of the expression list has been reached.
-            return None
+        if c == '(':
+            # Get the rest of the expression.
+            return self.__parse_expr(got_paren=True)
+        else:
+            # All expressions start with '(', so this must be a keyword.
+            (loc, word) = self.__parse_word_with_loc()
+            word = c + word
 
-        if c != '(':
-            loc = self.__get_point_loc(True).span(self.__get_point_loc())
-            raise error.Syntax(loc, f'expected "(" but found "{c}"')
+            if word in keywords:
+                return word
+            else:
+                error_str = f'expected expression or keyword but found "{word}"'
+                raise error.Syntax(loc, error_str)
+
+
+    def __parse_expr(self, parsing_exprs_list=False, got_paren=False):
+        '''
+        Private function to parse and return a single expression.
+
+        If parsing_exprs_list is true, then reading the next non-whitespace
+        character as ')' causes this function to return None, indicating that
+        there are no more expressions in the list. If parsing_exprs_list is
+        false and a ')' is read, an error occurs indicating invalid syntax.
+
+        If got_paren is false, then the expression must start with '('. If
+        got_paren is true, then the opening parenthesis was already read so
+        the expression should begin with a keyword like lit, val, call, ....
+        '''
+
+        if not got_paren:
+            # Make sure the expression starts with an open paranthesis.
+            c = self.__eat_whitespace()
+            if c == '':
+                # The end of file was reached
+                return
+
+            if parsing_exprs_list and c == ')':
+                # The end of the expression list has been reached.
+                return None
+
+            if c != '(':
+                loc = self.__get_point_loc(True).span(self.__get_point_loc())
+                raise error.Syntax(loc, f'expected "(" but found "{c}"')
 
         start_point_loc = self.__get_point_loc(prev_col=True)
         word = self.__parse_word()
@@ -144,6 +176,8 @@ class Parser:
             return self.__parse_define(start_point_loc)
         elif word == 'call':
             return self.__parse_call(start_point_loc)
+        elif word == 'if':
+            return self.__parse_if(start_point_loc)
         else:
             print(f'unknown word: "{word}"')
 
@@ -304,8 +338,8 @@ class Parser:
         '''
         Private function to parse a single CALL expression. The _file
         variable should be in a state starting with (without quotes):
-        '<name> <arg1_expr> <arg2_expr> ...)
-        That is, the '(define ' section has alread been read.
+        '<name> <arg1_expr> <arg2_expr> ...)'
+        That is, the '(call ' section has alread been read.
 
         Returns an instance of Call()
         '''
@@ -336,6 +370,58 @@ class Parser:
         # Now the entire call has been parsed.
         loc = start_point_loc.span(self.__get_point_loc())
         return Call(loc, call_name, call_params)
+
+
+    def __parse_if(self, start_point_loc):
+        '''
+        Private function to parse a single IF expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<cond> then <e1> <e2> ... else <e1> <e2> ...)'
+        That is, the '(if ' section has alread been read.
+
+        Returns an instance of If()
+        '''
+
+        # Parse the condition expression.
+        if_cond = self.__parse_expr()
+
+        # After the condition there should be the 'then' keyword
+        (l, then_word) = self.__parse_word_with_loc()
+        if then_word != 'then':
+            raise error.Syntax(l, f'expected "then" but got {then_word}')
+
+        # Parse the list of 'then' expressions.
+        if_then = []
+        while True:
+            e = self.__parse_expr_or_keyword()
+
+            # Check if a keyword was read.
+            if e in keywords:
+                if e == 'else':
+                    break
+                else:
+                    point_l = self.__get_point_loc()
+                    point_l.col -= len(e)
+                    loc = point_l.span(self.__get_point_loc())
+
+                    raise error.Syntax(loc, f'expected "else" but got {e}')
+
+            # An expression was parsed.
+            if_then.append(e)
+
+        # Parse the list of 'else' expressions.
+        if_else = []
+        while True:
+            e = self.__parse_expr(parsing_exprs_list=True)
+
+            if e is None:
+                break
+
+            if_else.append(e)
+
+        # Now the entire function has been parsed.
+        loc = start_point_loc.span(self.__get_point_loc())
+        return If(loc, if_cond, if_then, if_else)
 
 
     def parse(self):

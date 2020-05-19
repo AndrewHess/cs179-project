@@ -6,7 +6,7 @@ class Error(Exception):
     loc = None  # Type Location
 
     def print(self):
-        print(f'type error in {self.loc.to_string()}: ', end='')
+        print(f'Error in {self.loc.to_string()}: ', end='')
         self._print_end()
 
 
