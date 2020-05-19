@@ -51,13 +51,17 @@ class Parser:
 
     def __parse_word_with_loc(self):
         '''
-        Parse a single word, stopping at a whitespace or ')'.
+        Parse a single word, stopping at a whitespace or ')'. If a string is
+        encountered, then parse until the end instead of immediately stopping
+        at whitespace or ')'
 
         Return (loc, word), where loc is the location in the file of the word
         that was read.
         '''
 
         word = self.__eat_whitespace()
+        is_string = (word == '\'')
+        string_done = False  # Only used if is_string is True
         start_point_loc = self.__get_point_loc(True)
         end_point_loc = None
 
@@ -66,7 +70,8 @@ class Parser:
             c = self._file.read(1)
 
             # Check if the end of the word was reached.
-            if not c or c == ' ' or c == '\t' or c == '\n' or c == ')':
+            if not c or string_done or \
+               (not is_string and (c in [' ', '\t', '\n', ')'])):
                 # The word ended.
                 end_point_loc = self.__get_point_loc()
 
@@ -80,6 +85,9 @@ class Parser:
 
             word += c
             self._file_col += 1
+
+            if c == '\'' and is_string:
+                string_done = True
 
         assert(end_point_loc is not None)
 

@@ -53,7 +53,7 @@ class Type(Enum):
 
         if v[0] == '\'':
             if v[-1] != '\'':
-                raise Error.Syntax(loc, 'invalid string: {v}')
+                raise error.Syntax(loc, f'invalid string: {v}')
             return Type.STRING
         elif '.' in v:
             return Type.FLOAT
