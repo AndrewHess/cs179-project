@@ -5,7 +5,8 @@ from type import Type
 
 
 # Keywords cannot be used for function/variable names etc.
-keywords = ['lit', 'val', 'set', 'get', 'define', 'call', 'if', 'then', 'else']
+keywords = ['lit', 'val', 'set', 'get', 'define', 'call', 'if', 'then', 'else',
+            'loop', 'do']
 
 
 class Parser:
@@ -162,7 +163,7 @@ class Parser:
                 raise error.Syntax(loc, f'expected "(" but found "{c}"')
 
         start_point_loc = self.__get_point_loc(prev_col=True)
-        word = self.__parse_word()
+        (loc, word) = self.__parse_word_with_loc()
 
         if word == 'lit':
             return self.__parse_literal(start_point_loc)
@@ -178,8 +179,10 @@ class Parser:
             return self.__parse_call(start_point_loc)
         elif word == 'if':
             return self.__parse_if(start_point_loc)
+        elif word == 'loop':
+            return self.__parse_loop(start_point_loc)
         else:
-            print(f'unknown word: "{word}"')
+            raise error.Syntax(loc, f'unknown expression type: {word}')
 
 
     def __parse_literal(self, start_point_loc):
@@ -385,7 +388,7 @@ class Parser:
         # Parse the condition expression.
         if_cond = self.__parse_expr()
 
-        # After the condition there should be the 'then' keyword
+        # After the condition there should be the 'then' keyword.
         (l, then_word) = self.__parse_word_with_loc()
         if then_word != 'then':
             raise error.Syntax(l, f'expected "then" but got {then_word}')
@@ -419,9 +422,44 @@ class Parser:
 
             if_else.append(e)
 
-        # Now the entire function has been parsed.
+        # Now the entire if expression has been parsed.
         loc = start_point_loc.span(self.__get_point_loc())
         return If(loc, if_cond, if_then, if_else)
+
+
+    def __parse_loop(self, start_point_loc):
+        '''
+        Private function to parse a single LOOP expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<init> <test> <update> <e1> <e2> ...)'
+        That is, the '(loop ' section has alread been read.
+
+        Returns an instance of Loop()
+        '''
+
+        # Parse the beginning expressions.
+        loop_init = self.__parse_expr()
+        loop_test = self.__parse_expr()
+        loop_update = self.__parse_expr()
+
+        # Just before the body expressions there should be the 'do' keyword.
+        (l, do_word) = self.__parse_word_with_loc()
+        if do_word != 'do':
+            raise error.Syntax(l, f'expected "do" but got {do_word}')
+
+        # Parse the list of body expressions.
+        loop_body = []
+        while True:
+            e = self.__parse_expr(parsing_exprs_list=True)
+
+            if e is None:
+                break
+
+            loop_body.append(e)
+
+        # Now the entire loop expression has been parsed.
+        loc = start_point_loc.span(self.__get_point_loc())
+        return Loop(loc, loop_init, loop_test, loop_update, loop_body)
 
 
     def parse(self):

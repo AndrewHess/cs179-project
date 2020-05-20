@@ -82,8 +82,11 @@ class Generator:
             return self.__translate_call_expr(expr, end)
         elif expr.exprClass == ExprEnum.IF:
             return self.__translate_if_expr(expr, end)
+        elif expr.exprClass == ExprEnum.LOOP:
+            return self.__translate_loop_expr(expr, end)
         else:
-            raise error.InternalError(expr.loc, 'unknown expression type')
+            error_str = f'unknown expression type: {expr.exprClass}'
+            raise error.InternalError(expr.loc, error_str)
 
 
     def __translate_literal_expr(self, expr, end=True):
@@ -359,6 +362,36 @@ class Generator:
             cpp += (' ' * self._indent_jump) + f'{c};\n'
 
         # Close the 'else' block.
+        cpp += '}\n'
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
+
+
+    def __translate_loop_expr(self, expr, end=True):
+        ''' Get a single parsed LOOP expression and return the equivalent
+            C++ and CUDA code.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        cpp = 'for '
+        cuda = ''
+
+        # Add the beginning expressions for the loop.
+        cpp += '('
+        cpp += f'{self.__translate_expr(expr.init, end=False)[0]}; '
+        cpp += f'{self.__translate_expr(expr.test, end=False)[0]}; '
+        cpp += f'{self.__translate_expr(expr.update, end=False)[0]}'
+        cpp += ') {\n'
+
+        # Add the body expressions.
+        for e in expr.body:
+            (c, _) = self.__translate_expr(e, end=False)
+            cpp += (' ' * self._indent_jump) + f'{c};\n'
+
+        # Close the loop.
         cpp += '}\n'
 
         cpp = self._make_indented(cpp)

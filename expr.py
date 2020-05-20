@@ -13,6 +13,7 @@ class ExprEnum(Enum):
     DEFINE     = 5
     CALL       = 6
     IF         = 7
+    LOOP       = 8
 
 
 class Expr:
@@ -85,5 +86,15 @@ class If(Expr):
         self.exprClass = ExprEnum.IF
         self.loc = _loc                 # Type Location
         self.cond = _cond               # Type Expr
-        self.then = _then               # Type List of Expr's
-        self.otherwise = _otherwise     # Type List of Expr's
+        self.then = _then               # Type list of Expr's
+        self.otherwise = _otherwise     # Type list of Expr's
+
+
+class Loop(Expr):
+    def __init__(self, _loc, _init, _test, _update, _body):
+        self.exprClass = ExprEnum.LOOP
+        self.loc = _loc         # Type Location
+        self.init = _init       # Type Expr
+        self.test = _test       # Type Expr
+        self.update = _update   # Type Expr
+        self.body = _body       # Type list of Expr's
