@@ -14,6 +14,7 @@ class ExprEnum(Enum):
     CALL       = 6
     IF         = 7
     LOOP       = 8
+    LIST       = 9
 
 
 class Expr:
@@ -98,3 +99,12 @@ class Loop(Expr):
         self.test = _test       # Type Expr
         self.update = _update   # Type Expr
         self.body = _body       # Type list of Expr's
+
+
+class List(Expr):
+    def __init__(self, _loc, _elem_type, _name, _size):
+        self.exprClass = ExprEnum.LIST
+        self.loc = _loc                 # Type Location
+        self.elem_type = _elem_type     # Type Type
+        self.name = _name               # Type string
+        self.size = _size               # Type Expr; should evaluate to an int

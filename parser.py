@@ -6,7 +6,7 @@ from type import Type
 
 # Keywords cannot be used for function/variable names etc.
 keywords = ['lit', 'val', 'set', 'get', 'define', 'call', 'if', 'then', 'else',
-            'loop', 'do']
+            'loop', 'do', 'list']
 
 
 class Parser:
@@ -48,6 +48,18 @@ class Parser:
                 self._eof = True
 
             return c
+
+
+    def __eat_close_paren(self):
+        ''' Advance the file one character and varify that it reads ')'. '''
+
+        c = self._file.read(1)
+        self._file_col += 1
+
+        loc = self.__get_point_loc(True).span(self.__get_point_loc())
+
+        if c != ')':
+            raise error.Syntax(loc, f'expected ")" but got "{c}"')
 
 
     def __parse_word_with_loc(self):
@@ -181,6 +193,8 @@ class Parser:
             return self.__parse_if(start_point_loc)
         elif word == 'loop':
             return self.__parse_loop(start_point_loc)
+        elif word == 'list':
+            return self.__parse_list(start_point_loc)
         else:
             raise error.Syntax(loc, f'unknown expression type: {word}')
 
@@ -236,17 +250,9 @@ class Parser:
         var_val = self.__parse_expr()
 
         # Read the final ')'.
-        var_end = self._file.read(1)
-        self._file_col += 1
+        self.__eat_close_paren()
 
         loc = start_point_loc.span(self.__get_point_loc())
-
-        if var_end != ')':
-            raise error.Syntax(loc, f'expected ")" but got "{var_end}"')
-
-        # # Convert the value to the given type.
-        # var_val = Type.convert_type(loc, var_type, var_val)
-
         return CreateVar(loc, var_type, var_name, var_val)
 
 
@@ -262,21 +268,12 @@ class Parser:
 
         set_name = self.__parse_word()
         set_val = self.__parse_expr()
-
-        # Read the final ')'.
-        set_end = self._file.read(1)
-        self._file_col += 1
-
-        loc = start_point_loc.span(self.__get_point_loc())
-
-        if set_end != ')':
-            raise error.Syntax(loc, f'expected ")" but got "{set_end}"')
-
-        # # Convert the value to the correct type.
-        # set_type = Type.get_type_from_string_val(loc, set_val)
-        # set_val = Type.convert_type(loc, set_type, set_val)
         set_type = None
 
+        # Read the final ')'.
+        self.__eat_close_paren()
+
+        loc = start_point_loc.span(self.__get_point_loc())
         return SetVar(loc, set_type, set_name, set_val)
 
 
@@ -460,6 +457,27 @@ class Parser:
         # Now the entire loop expression has been parsed.
         loc = start_point_loc.span(self.__get_point_loc())
         return Loop(loc, loop_init, loop_test, loop_update, loop_body)
+
+
+    def __parse_list(self, start_point_loc):
+        '''
+        Private function to parse a single LIST expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<elem_type> <name> <size>)'
+        That is, the '(list ' section has alread been read.
+
+        Returns an instance of List()
+        '''
+
+        list_elem_type = self.__parse_type()
+        list_name = self.__parse_word()
+        list_size = self.__parse_expr()
+
+        # Read the final ')'.
+        self.__eat_close_paren()
+
+        loc = start_point_loc.span(self.__get_point_loc())
+        return List(loc, list_elem_type, list_name, list_size)
 
 
     def parse(self):

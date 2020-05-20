@@ -84,6 +84,8 @@ class Generator:
             return self.__translate_if_expr(expr, end)
         elif expr.exprClass == ExprEnum.LOOP:
             return self.__translate_loop_expr(expr, end)
+        elif expr.exprClass == ExprEnum.LIST:
+            return self.__translate_list_expr(expr, end)
         else:
             error_str = f'unknown expression type: {expr.exprClass}'
             raise error.InternalError(expr.loc, error_str)
@@ -393,6 +395,25 @@ class Generator:
 
         # Close the loop.
         cpp += '}\n'
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
+
+
+    def __translate_list_expr(self, expr, end=True):
+        ''' Get a single parsed LIST expression and return the equivalent
+            C++ and CUDA code.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        cpp = ''
+        cuda = ''
+
+        cpp += f'{Type.enum_to_c_type(expr.loc, expr.elem_type)} '
+        cpp += f'{expr.name}[{self.__translate_expr(expr.size, end=False)[0]}]'
+        cpp += ';\n' if end else ''
 
         cpp = self._make_indented(cpp)
         return (cpp, cuda)
