@@ -16,11 +16,15 @@ prim_binary_funcs = {'+': '+',
                      '==': '==',
                      '!=': '!=',
                      'or': '||',
-                     'and': '&&'}
+                     'and': '&&',
+                     'xor': '^'}
 
 # Map from other primitive functions to the cpp equivalent.
 prim_other_funcs = {'print': 'printf',
-                    'not': '!'}
+                    'not': '!',
+                    'rand': '(int) random',
+                    'srand': 'srandom',
+                    'time': 'time'}
 
 
 class Generator:
@@ -86,6 +90,10 @@ class Generator:
             return self.__translate_loop_expr(expr, end)
         elif expr.exprClass == ExprEnum.LIST:
             return self.__translate_list_expr(expr, end)
+        elif expr.exprClass == ExprEnum.LIST_AT:
+            return self.__translate_list_at_expr(expr, end)
+        elif expr.exprClass == ExprEnum.LIST_SET:
+            return self.__translate_list_set_expr(expr, end)
         else:
             error_str = f'unknown expression type: {expr.exprClass}'
             raise error.InternalError(expr.loc, error_str)
@@ -419,6 +427,43 @@ class Generator:
         return (cpp, cuda)
 
 
+    def __translate_list_at_expr(self, expr, end=True):
+        ''' Get a single parsed LIST_AT expression and return the equivalent
+            C++ and CUDA code.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        cpp = ''
+        cuda = ''
+
+        cpp += f'{expr.list}[{self.__translate_expr(expr.index, end=False)[0]}]'
+        cpp += ';\n' if end else ''
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
+
+
+    def __translate_list_set_expr(self, expr, end=True):
+        ''' Get a single parsed LIST_SET expression and return the equivalent
+            C++ and CUDA code.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        cpp = ''
+        cuda = ''
+
+        cpp += f'{expr.list}[{self.__translate_expr(expr.index, end=False)[0]}]'
+        cpp += f' = {self.__translate_expr(expr.val, end=False)[0]}'
+        cpp += ';\n' if end else ''
+
+        cpp = self._make_indented(cpp)
+        return (cpp, cuda)
+
+
     def generate(self):
         '''
         Get the parsed code from the input file and write equivalent C++ and
@@ -437,6 +482,7 @@ class Generator:
         self._out_file = open(self.out_filename, 'w')
         self._out_file.write('#include <stdio.h>\n')
         self._out_file.write('#include <stdlib.h>\n')
+        self._out_file.write('#include <time.h>\n')
         self._out_file.write('\n')
 
         # Convert each expression to C++ and CUDA code, writing the result to
@@ -449,7 +495,7 @@ class Generator:
 
 
 def main():
-    g = Generator('examples/example4.zb', 'examples/example4.cpp')
+    g = Generator('examples/add_lists.zb', 'examples/add_lists.cpp')
     g.generate()
 
 main()

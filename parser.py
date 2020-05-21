@@ -195,6 +195,10 @@ class Parser:
             return self.__parse_loop(start_point_loc)
         elif word == 'list':
             return self.__parse_list(start_point_loc)
+        elif word == 'list_at':
+            return self.__parse_list_at(start_point_loc)
+        elif word == 'list_set':
+            return self.__parse_list_set(start_point_loc)
         else:
             raise error.Syntax(loc, f'unknown expression type: {word}')
 
@@ -288,7 +292,22 @@ class Parser:
         '''
 
         # Get the return type and function name.
-        def_return_type = self.__parse_type()
+        (l, def_return_type) = self.__parse_word_with_loc()
+        if def_return_type == 'list':
+            list_type = self.__parse_type()
+            if list_type == Type.INT:
+                def_return_type = Type.LIST_INT
+            elif list_type == Type.FLOAT:
+                def_return_type = Type.LIST_FLOAT
+            elif list_type == Type.STRING:
+                def_return_type = Type.LIST_STRING
+            else:
+                error_str = '__parse_define cannot get here'
+                raise error.InternalError(l, error_str)
+        else:
+            def_return_type = Type.str_to_type(l, def_return_type)
+
+
         def_name = self.__parse_word()
 
         # Parse the ':' between function name and start of arguments.
@@ -313,7 +332,21 @@ class Parser:
                 break
 
             # There is another argument to parse.
-            arg_type = Type.str_to_type(l, maybe_type)
+            arg_type = None
+            if maybe_type == 'list':
+                list_type = self.__parse_type()
+                if list_type == Type.INT:
+                    arg_type = Type.LIST_INT
+                elif list_type == Type.FLOAT:
+                    arg_type = Type.LIST_FLOAT
+                elif list_type == Type.STRING:
+                    arg_type = Type.LIST_STRING
+                else:
+                    error_str = '__parse_define cannot get here'
+                    raise error.InternalError(l, error_str)
+            else:
+                arg_type = Type.str_to_type(l, maybe_type)
+
             arg_name = self.__parse_word()
 
             def_args.append((arg_type, arg_name))
@@ -478,6 +511,47 @@ class Parser:
 
         loc = start_point_loc.span(self.__get_point_loc())
         return List(loc, list_elem_type, list_name, list_size)
+
+
+    def __parse_list_at(self, start_point_loc):
+        '''
+        Private function to parse a single LIST_AT expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<list_name> <index>)'
+        That is, the '(list_at ' section has alread been read.
+
+        Returns an instance of ListAt()
+        '''
+
+        list_at_name = self.__parse_word()
+        list_at_ind = self.__parse_expr()
+
+        # Read the final ')'.
+        self.__eat_close_paren()
+
+        loc = start_point_loc.span(self.__get_point_loc())
+        return ListAt(loc, list_at_name, list_at_ind)
+
+
+    def __parse_list_set(self, start_point_loc):
+        '''
+        Private function to parse a single LIST_SET expression. The _file
+        variable should be in a state starting with (without quotes):
+        '<list_name> <index> <new_value)'
+        That is, the '(list_set ' section has alread been read.
+
+        Returns an instance of ListSet()
+        '''
+
+        list_set_name = self.__parse_word()
+        list_set_ind = self.__parse_expr()
+        list_set_val = self.__parse_expr()
+
+        # Read the final ')'.
+        self.__eat_close_paren()
+
+        loc = start_point_loc.span(self.__get_point_loc())
+        return ListSet(loc, list_set_name, list_set_ind, list_set_val)
 
 
     def parse(self):

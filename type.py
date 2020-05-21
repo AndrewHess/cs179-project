@@ -3,10 +3,13 @@ import error
 
 
 class Type(Enum):
-    INT     = 1
-    FLOAT   = 2
-    STRING  = 3
-    UNKNOWN = 4
+    INT         = 1
+    FLOAT       = 2
+    STRING      = 3
+    LIST_INT    = 4
+    LIST_FLOAT  = 5
+    LIST_STRING = 6
+    UNKNOWN     = 7
 
 
     def type_to_str(loc, t):
@@ -100,5 +103,11 @@ class Type(Enum):
             return 'float'
         elif type_enum == Type.STRING:
             return 'char *'
+        elif type_enum == Type.LIST_INT:
+            return 'int *'
+        elif type_enum == Type.LIST_FLOAT:
+            return 'float *'
+        elif type_enum == Type.LIST_STRING:
+            return 'char **'
         else:
             error.InternalError(loc, f'bad enum_to_c_type param: {type_enum}')

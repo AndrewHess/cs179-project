@@ -15,6 +15,8 @@ class ExprEnum(Enum):
     IF         = 7
     LOOP       = 8
     LIST       = 9
+    LIST_AT    = 10
+    LIST_SET   = 11
 
 
 class Expr:
@@ -108,3 +110,31 @@ class List(Expr):
         self.elem_type = _elem_type     # Type Type
         self.name = _name               # Type string
         self.size = _size               # Type Expr; should evaluate to an int
+
+        # Determine the type of the list from the element type.
+        self.type = None
+        if _elem_type == Type.INT:
+            self.type = Type.LIST_INT
+        elif _elem_type == Type.FLOAT:
+            self.type = Type.LIST_FLOAT
+        elif _elem_type == Type.STRING:
+            self.type = Type.LIST_STRING
+        else:
+            raise error.InvalidType(loc, _elem_type)
+
+
+class ListAt(Expr):
+    def __init__(self, _loc, _list, _index):
+        self.exprClass = ExprEnum.LIST_AT
+        self.loc = _loc         # Type Location
+        self.list = _list       # Type string; the name of the list
+        self.index = _index     # Type Expr; should evaluate to an int
+
+
+class ListSet(Expr):
+    def __init__(self, _loc, _list, _index, _val):
+        self.exprClass = ExprEnum.LIST_SET
+        self.loc = _loc         # Type Location
+        self.list = _list       # Type string; the name of the list
+        self.index = _index     # Type Expr; should evaluate to an int
+        self.val = _val         # Type Expr; should have type list.elem_type
