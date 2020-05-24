@@ -3,13 +3,14 @@ import error
 
 
 class Type(Enum):
-    INT         = 1
-    FLOAT       = 2
-    STRING      = 3
-    LIST_INT    = 4
-    LIST_FLOAT  = 5
-    LIST_STRING = 6
-    UNKNOWN     = 7
+    INT             = 1
+    FLOAT           = 2
+    STRING          = 3
+    LIST_INT        = 4
+    LIST_FLOAT      = 5
+    LIST_STRING     = 6
+    NONE            = 7     # Some expressions have no return type.
+    UNDETERMINED    = 8     # There is a type, but it is not yet known.
 
 
     def type_to_str(loc, t):
@@ -19,8 +20,6 @@ class Type(Enum):
             return 'float'
         elif t == Type.STRING:
             return 'string'
-        elif t == Type.UNKNOWN:
-            return 'unknown'
         else:
             raise error.InternalError(loc, f'type_to_str: unknown type: {t}')
 

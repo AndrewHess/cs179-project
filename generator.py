@@ -2,8 +2,11 @@ import error
 from expr import ExprEnum
 from parser import Parser
 from type import Type
+from type_checker import TypeChecker
 
 # Map from primitive binary function name to the cpp equivalent function name.
+# Note: If this is updated, Parser.parse() must also be updated for the new
+# primitive functions to pass type checking and be used.
 prim_binary_funcs = {'+': '+',
                      '-': '-',
                      '*': '*',
@@ -20,6 +23,8 @@ prim_binary_funcs = {'+': '+',
                      'xor': '^'}
 
 # Map from other primitive functions to the cpp equivalent.
+# Note: If this is updated, Parser.parse() must also be updated for the new
+# primitive functions to pass type checking and be used.
 prim_other_funcs = {'print': 'printf',
                     'not': '!',
                     'rand': '(int) random',
@@ -94,6 +99,9 @@ class Generator:
             return self.__translate_list_at_expr(expr, end)
         elif expr.exprClass == ExprEnum.LIST_SET:
             return self.__translate_list_set_expr(expr, end)
+        elif expr.exprClass == ExprEnum.PRIM_FUNC:
+            # There is no need to translate primitive functions into C++/CUDA.
+            return ('', '')
         else:
             error_str = f'unknown expression type: {expr.exprClass}'
             raise error.InternalError(expr.loc, error_str)
@@ -216,7 +224,7 @@ class Generator:
         cpp = ''
         cuda = ''
 
-        return_type = Type.enum_to_c_type(expr.loc, expr.return_type)
+        return_type = Type.enum_to_c_type(expr.loc, expr.type)
         cpp = f'{return_type} {expr.name}('
 
         # Add the parameters.
@@ -438,7 +446,7 @@ class Generator:
         cpp = ''
         cuda = ''
 
-        cpp += f'{expr.list}[{self.__translate_expr(expr.index, end=False)[0]}]'
+        cpp += f'{expr.name}[{self.__translate_expr(expr.index, end=False)[0]}]'
         cpp += ';\n' if end else ''
 
         cpp = self._make_indented(cpp)
@@ -456,7 +464,7 @@ class Generator:
         cpp = ''
         cuda = ''
 
-        cpp += f'{expr.list}[{self.__translate_expr(expr.index, end=False)[0]}]'
+        cpp += f'{expr.name}[{self.__translate_expr(expr.index, end=False)[0]}]'
         cpp += f' = {self.__translate_expr(expr.val, end=False)[0]}'
         cpp += ';\n' if end else ''
 
@@ -473,7 +481,12 @@ class Generator:
         # Get the parsed versino of the code.
         p = Parser(self.in_filename)  # Type list of Expr's
         try:
+            # Parse the code.
             parsed_exprs = p.parse()
+
+            # Typecheck the code.
+            type_checker = TypeChecker(parsed_exprs)
+            type_checker.validate_exprs()
         except error.Error as e:
             e.print()
             exit(1)

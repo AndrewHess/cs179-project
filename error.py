@@ -48,6 +48,16 @@ class IncompatibleType(Error):
         print(f'"{self.val}" is not of type {self.type_name}')
 
 
+class Type(Error):
+    def __init__(self, _loc, _msg):
+        self.loc = _loc     # Type Location
+        self.msg = _msg     # Type string
+
+
+    def _print_end(self):
+        print(f'type error: {self.msg}')
+
+
 class Syntax(Error):
     def __init__(self, _loc, _msg):
         self.loc = _loc     # Type Location
@@ -66,3 +76,23 @@ class InternalError(Error):
 
     def _print_end(self):
         print(f'internal error: {self.msg}')
+
+
+class Name(Error):
+    def __init__(self, _loc, _msg):
+        self.loc = _loc     # Type Location
+        self.msg = _msg     # Type string
+
+
+    def _print_end(self):
+        print(f'name error: {self.msg}')
+
+
+class Call(Error):
+    def __init__(self, _loc, _msg):
+        self.loc = _loc     # Type Location
+        self.msg = _msg     # Type string
+
+
+    def _print_end(self):
+        print(f'call error: {self.msg}')

@@ -272,13 +272,12 @@ class Parser:
 
         set_name = self.__parse_word()
         set_val = self.__parse_expr()
-        set_type = None
 
         # Read the final ')'.
         self.__eat_close_paren()
 
         loc = start_point_loc.span(self.__get_point_loc())
-        return SetVar(loc, set_type, set_name, set_val)
+        return SetVar(loc, set_name, set_val)
 
 
     def __parse_define(self, start_point_loc):
@@ -559,6 +558,36 @@ class Parser:
         Read a file of code and return the corresponding list of Expr's.
         '''
 
+        # Setup primitive functions so the code in the file can use them.
+        # The print function is not added here becuase it takes a variable
+        # number of arguments and this language does not yet allow for that.
+        # The print function is handled as a special case in the type checker.
+        def add_prim(l, ret_type, name, arg_types):
+            self._parsed_exprs.append(PrimFunc(l, ret_type, name, arg_types))
+
+        l = Location('primitives', 0, 0, 0, 0)
+        add_prim(l, Type.INT, '+',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '-',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '*',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '/',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '%',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '>',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '>=',     [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '<',      [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '<=',     [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '==',     [Type.INT, Type.INT])
+        add_prim(l, Type.INT, '!=',     [Type.INT, Type.INT])
+        add_prim(l, Type.INT, 'or',     [Type.INT, Type.INT])
+        add_prim(l, Type.INT, 'and',    [Type.INT, Type.INT])
+        add_prim(l, Type.INT, 'xor',    [Type.INT, Type.INT])
+
+        add_prim(l, Type.INT, 'not',    [Type.INT])
+        add_prim(l, Type.INT, 'rand',   [])
+        add_prim(l, Type.INT, 'srand',  [Type.INT])
+        add_prim(l, Type.INT, 'time',   [Type.INT])
+
+
+        # Parse the code in the file.
         self._file = open(self.filename)
 
         while not self._eof:
