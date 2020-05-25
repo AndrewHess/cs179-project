@@ -8,7 +8,7 @@ class TypeChecker:
     ''' Validate types and add environment info for all parsed expressions. '''
 
     def __init__(self, _parsed_exprs):
-        self.parsed_exprs = _parsed_exprs
+        self.parsed_exprs = _parsed_exprs  # Type list of Expr's
         self._env = env.Env()
 
 

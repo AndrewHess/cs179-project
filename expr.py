@@ -18,6 +18,7 @@ class ExprEnum(Enum):
     LIST_AT    = 10
     LIST_SET   = 11
     PRIM_FUNC  = 12
+    PARA_LOOP  = 13
 
 
 class Expr:
@@ -135,3 +136,14 @@ class PrimFunc(Expr):
         self.type = _return_type    # Type Type
         self.name = _name           # Type string
         self.arg_types = _arg_types # Type list of Type's for argument types
+
+
+class ParallelLoop(Expr):
+    def __init__(self, _loc, _index_name, _start_index, _iterations, _body):
+        self.exprClass = ExprEnum.PARA_LOOP
+        self.loc = _loc                     # Type Location
+        self.index_name = _index_name       # Type string
+        self.start_index = _start_index     # Type int
+        self.iterations = _iterations       # Type int
+        self.body = _body                   # Type list of Expr's
+        self.type = Type.NONE               # A Loop expression has no type
