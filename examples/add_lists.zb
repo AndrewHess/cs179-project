@@ -1,0 +1,51 @@
+(define int add_lists : list int a list int b list int c :
+    (loop (val int i (lit 0))
+          (call < : (get i) (lit 100))
+          (set i (call - : (get i) (lit 1)))
+    do
+        (val int ai (list_at a (get i)))
+        (val int bi (list_at b (get i)))
+        (list_set c (get i) (call + : (get ai) (get bi)))
+    )
+
+    (lit 0)
+)
+
+(define int sum : list int a :
+    (val int csum (lit 0))
+
+    (loop (val int i (lit 0))
+          (call < : (get i) (lit 100))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (val int ai (list_at a (get i)))
+        (set csum (call xor : (get csum) (get ai)))
+    )
+
+    (get csum)
+)
+
+(define int main : :
+    (call srand : (call time : (lit 0)))
+    (call print : (lit 'random number: %d\n') (call rand :))
+
+    (list int a (lit 100))
+    (list int b (lit 100))
+    (list int c (lit 100))
+
+    (loop (val int i (lit 0))
+          (call < : (get i) (lit 100))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (list_set a (get i) (call rand : ))
+        (list_set b (get i) (call rand : ))
+    )
+
+    (call add_lists : (get a) (get b) (get c))
+
+    (call print : (lit 'sum a: %d\n') (call sum : (get a) (lit 100)))
+    (call print : (lit 'sum b: %d\n') (call sum : (get b) (lit 100)))
+    (call print : (lit 'sum c: %d\n') (call sum : (get c) (lit 100)))
+
+    (lit 0)
+)
