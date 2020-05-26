@@ -333,9 +333,26 @@ class Analyzer:
             return
 
         # Make sure the index is not set inside the loop.
+        all_sets = []
         for e in expr.body:
-            if index_name in self.__deep_find_sets(e):
+            all_sets += self.__deep_find_sets(e)
+
+        if index_name in all_sets:
+            return
+
+        # If a non-list variable is set inside the loop, then the loop cannot
+        # be parallelized (yet) due to synchronization.
+        for x in all_sets:
+            x_type = expr.env.lookup_variable(expr.loc, x)
+            if x_type == Type.INT or x_type == Type.FLOAT or \
+               x_type == Type.STRING:
                 return
+
+        # TODO: Do not parallelize if two iterations of the loop set the same
+        #       location in any list, as this too causes race conditions.
+
+        # TODO: Do not parallelize if one iterations sets something in a list
+        #       and another iteration uses that list value.
 
         # Determine the variables that are used but not created by the loop.
         (used_variables, _) = self.__deep_used_not_created(expr, [])

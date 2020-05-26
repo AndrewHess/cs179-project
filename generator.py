@@ -540,18 +540,17 @@ class Generator:
 
         # Make device variables if necessary.
         dev_vars = []
-        dev_lists = []
         for var_name in expr.used_vars:
             dev_name = f'dev_{var_name}'
+            dev_vars.append(dev_name)
             var_type = expr.env.lookup_variable(expr.loc, var_name)
+
 
             print(f'setting up device variable for {var_name} with type {var_type}')
 
             if var_type == Type.INT or var_type == Type.FLOAT:
-                dev_vars.append(var_name)
+                pass
             elif var_type == Type.LIST_INT:
-                dev_lists.append(dev_name)
-
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
                 #       function.
@@ -566,8 +565,6 @@ class Generator:
                 cpp += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
                 cpp += f'cudaMemcpyHostToDevice);\n'
             elif var_type == Type.LIST_FLOAT:
-                dev_lists.append(dev_name)
-
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
                 #       function.
@@ -587,14 +584,7 @@ class Generator:
 
         # Call the kernel.
         cpp += f'{cuda_kernel_name}<<<{blocks}, {threads_per_block}>>>'
-        cpp += f'({", ".join(dev_lists)}'
-        if len(dev_lists) != 0 and len(dev_vars) != 0:
-            cpp += ', &'
-        elif len(dev_vars) != 0:
-            cpp += '&'
-
-        cpp += f'{", &".join(dev_vars)});\n'
-
+        cpp += f'({", ".join(dev_vars)});\n'
 
         # Copy the data back from device to host.
         for var_name in expr.used_vars:
@@ -664,15 +654,6 @@ class Generator:
 
         cuda += ' {\n'
 
-        # Setup any non-list parameters.
-        for var_name in dev_vars:
-            var_type = expr.env.lookup_variable(expr.loc, var_name)
-
-            if var_type == Type.INT:
-                cuda += f'    int {var_name} = *dev_{var_name};\n'
-            if var_type == Type.FLOAT:
-                cuda += f'    float {var_name} = *dev_{var_name};\n'
-
         # Determine the index in the loop.
         index = expr.index_name
         cuda += f'    int {index} = blockIdx.x * blockDim.x + threadIdx.x;\n\n'
@@ -686,14 +667,6 @@ class Generator:
 
         cuda += f'        {index} += gridDim.x * blockDim.x;\n'
         cuda += f'    {"}"}\n'
-
-        # Save the values of non-list variables.
-        for var_name in dev_vars:
-            var_type = expr.env.lookup_variable(expr.loc, var_name)
-
-            if var_type == Type.INT or var_type == Type.FLOAT:
-                cuda += f'    *dev_{var_name} = {var_name};\n'
-
         cuda += f'{"}"}\n\n'
 
         return (cpp, cuda)
