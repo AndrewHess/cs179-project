@@ -564,9 +564,6 @@ class Generator:
             dev_vars.append(dev_name)
             var_type = expr.env.lookup_variable(expr.loc, var_name)
 
-
-            print(f'setting up device variable for {var_name} with type {var_type}')
-
             if var_type == Type.INT or var_type == Type.FLOAT:
                 pass
             elif var_type == Type.LIST_INT:

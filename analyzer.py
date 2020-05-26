@@ -230,8 +230,6 @@ class Analyzer:
         # Do not parallelize a loop that uses rand() because running in
         # parallel vs sequential could cause different results, which is very
         # unintuitive if a fixed seed is used.
-        print('checking for loop parallel')
-
         if 'rand' in self.__deep_find_calls(expr):
             return
 
@@ -247,7 +245,6 @@ class Analyzer:
             return
         start = expr.init.val.val
         index_name = expr.init.name
-        print(f'got {index_name} starting at {start}')
 
         # Determine the stop criterion.
         if expr.test.exprClass != ExprEnum.CALL:
@@ -362,16 +359,12 @@ class Analyzer:
         # Determine the variables that are used but not created by the loop.
         (used_variables, _) = self.__deep_used_not_created(expr, [])
 
-        print(f'used variables: {used_variables}')
-
         # Since the loop is parallelized we can choose to start at the lowest
         # index for simplicity in generating the CUDA code.
         start = min(start, end)
         parallel_loop = ParallelLoop(expr.loc, index_name, start, iters,
                                      used_variables, expr.body)
         parallel_loop.env = expr.env
-        print(f'expr env type: {type(expr.env)}')
-        print(f'expr env: {expr.env}')
 
         return parallel_loop
 
