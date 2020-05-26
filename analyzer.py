@@ -26,7 +26,12 @@ class Analyzer:
             return []
         elif expr.exprClass == ExprEnum.CALL:
             # TODO: also include any functions called by this function.
-            return [expr.name]
+            funcs = [expr.name]
+
+            for p in expr.params:
+                funcs += self.__deep_find_calls(p)
+
+            return funcs
         elif expr.exprClass == ExprEnum.IF:
             # Include any functions that could possibly be called.
             funcs = self.__deep_find_calls(expr.cond)
