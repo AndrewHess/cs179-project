@@ -672,10 +672,13 @@ class Generator:
         return (cpp, cuda)
 
 
-    def generate(self):
+    def generate(self, try_parallelize=True):
         '''
         Get the parsed code from the input file and write equivalent C++ and
         CUDA code to the output file.
+
+        If the try_parallelize parameter is false, the code is just converted
+        to C++ without any CUDA code to parallelize it.
         '''
 
         # Get the parsed versino of the code.
@@ -690,10 +693,11 @@ class Generator:
             type_checker = TypeChecker(parsed_exprs)
             type_checker.validate_exprs()
 
-            # Analyze the code to see if some parts can be marked to run in
-            # parallel.
-            analyzer = Analyzer(parsed_exprs)
-            analyzer.analyze()
+            if try_parallelize:
+                # Analyze the code to see if some parts can be marked to run in
+                # parallel.
+                analyzer = Analyzer(parsed_exprs)
+                analyzer.analyze()
         except error.Error as e:
             e.print()
             exit(1)
@@ -779,6 +783,6 @@ class Generator:
 
 def main():
     g = Generator('examples/add_lists.zb')
-    g.generate()
+    g.generate(False)
 
 main()
