@@ -1,5 +1,5 @@
 import error
-
+from type import Type
 
 class Env:
     def __init__(self):
@@ -18,7 +18,9 @@ class Env:
 
     def copy(self):
         ''' Return a copy of the environment. '''
-        return list(self.env)
+        e = Env()
+        e.env = list(self.env)
+        return e
 
 
     def push_scope(self):
@@ -79,3 +81,64 @@ class Env:
 
         # The given name is not in the environment.
         return (None, None)
+
+
+    def lookup_variable(self, loc, expr_name):
+        ''' Find a variable in the environment and return its type. '''
+
+        # Make sure the variable already exists.
+        (name, type_lst, is_var) = self.get_entry_for_name(expr_name)
+
+        if name is None:
+            error_str = f'variable {expr_name} does not exist'
+            raise error.Name(loc, error_str)
+
+        if len(type_lst) != 1 or not is_var:
+            error_str = f'{expr_name} is a function; expected a variable'
+            raise error.Syntax(loc, error_str)
+
+        # Make sure the variable has a type.
+        if type_lst == [Type.UNDETERMINED] or type_lst == [Type.NONE]:
+            error_str = f'variable {expr_name} has bad type: {type_lst[0]}'
+            raise error.Type(loc, error_str)
+
+        return type_lst[0]
+
+
+    def lookup_function(self, loc, expr_name):
+        '''
+        Find a function in the environment.
+
+        Return a tuple with two elements. The first is the return type of the
+        function and the second is a list of types for the arguments.
+        '''
+
+        # Make sure the function already exists.
+        (name, type_lst, is_var) = self.get_entry_for_name(expr_name)
+
+        if name is None:
+            error_str = f'function {expr_name} does not exist'
+            raise error.Name(loc, error_str)
+
+        if is_var:
+            error_str = f'{expr_name} is a variable; expected a function'
+            raise error.Syntax(loc, error_str)
+
+        if len(type_lst) == 0:
+            error_str = f'{expr_name} has no return type'
+            raise error.InternalError(loc, error_str)
+
+        # Make sure the function has a return type.
+        ret_type = type_lst[0]
+        if ret_type == Type.UNDETERMINED or ret_type == Type.NONE:
+            error_str = f'function {expr_name} has bad return type: {ret_type}'
+            raise error.Type(loc, error_str)
+
+        # Make sure the parameter types are valid.
+        for param_type in type_lst[1:]:
+            if param_type == Type.UNDETERMINED or param_type == Type.NONE:
+                error_str =  f'function {expr_name} has bad '
+                error_str += f'paramter type: {param_type}'
+                raise error.Type(expr.loc, error_str)
+
+        return (ret_type, type_lst[1:])

@@ -123,6 +123,99 @@ class Analyzer:
             raise error.InternalError(expr.loc, error_str)
 
 
+    def __deep_used_not_created(self, expr, created):
+        '''
+        Return a tuple containing:
+            1. A list of names of variables that were accessed but not created
+               as part of the expression.
+            2. A list of names of variables created by the experssion, combined
+               with the input 'created' list.
+        '''
+
+        used = []
+
+        if expr.exprClass == ExprEnum.LITERAL:
+            pass
+        elif expr.exprClass == ExprEnum.CREATE_VAR:
+            created += [expr.name]
+            (used, created) = self.__deep_used_not_created(expr.val, created)
+        elif expr.exprClass == ExprEnum.SET_VAR:
+            (used, created) = self.__deep_used_not_created(expr.val, created)
+            used += [expr.name]
+        elif expr.exprClass == ExprEnum.GET_VAR:
+            used = [expr.name]
+        elif expr.exprClass == ExprEnum.DEFINE:
+            pass
+        elif expr.exprClass == ExprEnum.CALL:
+            # TODO: also include any accesses due to the called function.
+            for e in expr.params:
+                (u, created) = self.__deep_used_not_created(e, created)
+                used += u
+
+        elif expr.exprClass == ExprEnum.IF:
+            # Include any accesses that could possibly occur.
+            (used, created) = self.__deep_used_not_created(expr.cond, created)
+
+            # This must be done with care to appropriately address the possible
+            # case where variable x is created before the If expression, the
+            # 'then' part creates a variable x in the new scope and uses it,
+            # and the 'else' part uses the original x variable.
+
+            then_create = list(created)  # Make a copy of the 'created' list
+            for e in expr.then:
+                (u, then_create) = self.__deep_used_not_created(e, then_create)
+
+                for x in u:
+                    if x not in then_create:
+                        used.append(x)
+
+            else_create = list(created)
+            for e in expr.otherwise:
+                (u, else_create) = self.__deep_used_not_created(e, else_create)
+
+                for x in u:
+                    if x not in else_create:
+                        used.append(x)
+
+            return (used, created)
+        elif expr.exprClass == ExprEnum.LOOP:
+            (u1, created) = self.__deep_used_not_created(expr.init, created)
+            (u2, created) = self.__deep_used_not_created(expr.test, created)
+            (u3, created) = self.__deep_used_not_created(expr.update, created)
+
+            used = u1 + u2 + u3
+
+            for e in expr.body:
+                (u, created) = self.__deep_used_not_created(e, created)
+                used += u
+
+        elif expr.exprClass == ExprEnum.LIST:
+            created += [expr.name]
+            (used, created) = self.__deep_used_not_created(expr.size, created)
+        elif expr.exprClass == ExprEnum.LIST_AT:
+            (used, created) = self.__deep_used_not_created(expr.index, created)
+            used += [expr.name]
+        elif expr.exprClass == ExprEnum.LIST_SET:
+            (u1, created) = self.__deep_used_not_created(expr.index, created)
+            (u2, created) = self.__deep_used_not_created(expr.val, created)
+
+            used = u1 + u2 + [expr.name]
+        elif expr.exprClass == ExprEnum.PRIM_FUNC:
+            pass
+        else:
+            error_str = f'unknown expression type: {expr.exprClass}'
+            raise error.InternalError(expr.loc, error_str)
+
+        # Find all of the variables that were used but not created.
+        used_not_created = []
+
+        for x in used:
+            if x not in created and x not in used_not_created:
+                used_not_created.append(x)
+
+        return (used_not_created, created)
+
+
     def __maybe_parallelize_loop(self, expr):
         '''
         Parallelize the loop expression if it can be, and update
@@ -244,10 +337,21 @@ class Analyzer:
             if index_name in self.__deep_find_sets(e):
                 return
 
+        # Determine the variables that are used but not created by the loop.
+        (used_variables, _) = self.__deep_used_not_created(expr, [])
+
+        print(f'used variables: {used_variables}')
+
         # Since the loop is parallelized we can choose to start at the lowest
         # index for simplicity in generating the CUDA code.
         start = min(start, end)
-        return ParallelLoop(expr.loc, index_name, start, iters, expr.body)
+        parallel_loop = ParallelLoop(expr.loc, index_name, start, iters,
+                                     used_variables, expr.body)
+        parallel_loop.env = expr.env
+        print(f'expr env type: {type(expr.env)}')
+        print(f'expr env: {expr.env}')
+
+        return parallel_loop
 
 
     def __deep_analyze_expr(self, expr):
@@ -285,10 +389,7 @@ class Analyzer:
             # Actually try to parallelize a loop.
             parallel_loop = self.__maybe_parallelize_loop(expr)
             if parallel_loop is not None:
-                print('parallelized loop!')
                 expr = parallel_loop
-            else:
-                print('loop could not be parallelized')
 
         elif expr.exprClass == ExprEnum.LIST:
             expr.size = self.__deep_analyze_expr(expr.size)

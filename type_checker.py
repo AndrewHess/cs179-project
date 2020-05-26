@@ -25,67 +25,6 @@ class TypeChecker:
             raise error.UnexpectedType(loc, t, e.type)
 
 
-    def __lookup_variable(self, loc, expr_name):
-        ''' Find a variable in the environment and return its type. '''
-
-        # Make sure the variable already exists.
-        (name, type_lst, is_var) = self._env.get_entry_for_name(expr_name)
-
-        if name is None:
-            error_str = f'variable {expr_name} does not exist'
-            raise error.Name(loc, error_str)
-
-        if len(type_lst) != 1 or not is_var:
-            error_str = f'{expr_name} is a function; expected a variable'
-            raise error.Syntax(loc, error_str)
-
-        # Make sure the variable has a type.
-        if type_lst == [Type.UNDETERMINED] or type_lst == [Type.NONE]:
-            error_str = f'variable {expr_name} has bad type: {type_lst[0]}'
-            raise error.Type(loc, error_str)
-
-        return type_lst[0]
-
-
-    def __lookup_function(self, loc, expr_name):
-        '''
-        Find a function in the environment.
-
-        Return a tuple with two elements. The first is the return type of the
-        function and the second is a list of types for the arguments.
-        '''
-
-        # Make sure the function already exists.
-        (name, type_lst, is_var) = self._env.get_entry_for_name(expr_name)
-
-        if name is None:
-            error_str = f'function {expr_name} does not exist'
-            raise error.Name(loc, error_str)
-
-        if is_var:
-            error_str = f'{expr_name} is a variable; expected a function'
-            raise error.Syntax(loc, error_str)
-
-        if len(type_lst) == 0:
-            error_str = f'{expr_name} has no return type'
-            raise error.InternalError(loc, error_str)
-
-        # Make sure the function has a return type.
-        ret_type = type_lst[0]
-        if ret_type == Type.UNDETERMINED or ret_type == Type.NONE:
-            error_str = f'function {expr_name} has bad return type: {ret_type}'
-            raise error.Type(loc, error_str)
-
-        # Make sure the parameter types are valid.
-        for param_type in type_lst[1:]:
-            if param_type == Type.UNDETERMINED or param_type == Type.NONE:
-                error_str =  f'function {expr_name} has bad '
-                error_str += f'paramter type: {param_type}'
-                raise error.Type(expr.loc, error_str)
-
-        return (ret_type, type_lst[1:])
-
-
     def __validate_single_expr(self, expr):
         ''' Validate one parsed expression and add environment info. '''
 
@@ -153,7 +92,7 @@ class TypeChecker:
             raise error.InternalError(expr.loc, error_str)
 
         # Get the type of the variable.
-        expr_type = self.__lookup_variable(expr.loc, expr.name)
+        expr_type = self._env.lookup_variable(expr.loc, expr.name)
 
         # Validate the expression that the value is set to.
         self.__validate_single_expr(expr.val)
@@ -172,7 +111,7 @@ class TypeChecker:
             raise error.InternalError(expr.loc, error_str)
 
         # Get the type of the variable and set expr.type.
-        expr.type = self.__lookup_variable(expr.loc, expr.name)
+        expr.type = self._env.lookup_variable(expr.loc, expr.name)
 
 
     def __validate_define_expr_type(self, expr):
@@ -245,7 +184,7 @@ class TypeChecker:
 
         # The function is not print, so it must be in the environment.
         # Get the type of the function.
-        (ret_type, args_types) = self.__lookup_function(expr.loc, expr.name)
+        (ret_type, args_types) = self._env.lookup_function(expr.loc, expr.name)
 
         # Check that the number of arguments is correct.
         if len(expr.params) != len(args_types):
@@ -286,13 +225,13 @@ class TypeChecker:
             error_str = f'expected Loop to have NONE type'
             raise error.InternalError(expr.loc, error_str)
 
+        # The whole loop is in a new scope.
+        self._env.push_scope()
+
         # A Loop expression has no type, so just typecheck its subexpressions.
         self.__validate_single_expr(expr.init)
         self.__validate_single_expr(expr.test)
         self.__validate_single_expr(expr.update)
-
-        # The loop body is in a new scope.
-        self._env.push_scope()
 
         for e in expr.body:
             self.__validate_single_expr(e)
@@ -334,7 +273,7 @@ class TypeChecker:
             raise error.InternalError(expr.loc, error_str)
 
         # Get the type of the list.
-        list_type = self.__lookup_variable(expr.loc, expr.name)
+        list_type = self._env.lookup_variable(expr.loc, expr.name)
 
         # Determine the type of the list element.
         elem_type = None
@@ -364,7 +303,7 @@ class TypeChecker:
             raise error.InternalError(expr.loc, error_str)
 
         # Get the type of the list.
-        list_type = self.__lookup_variable(expr.loc, expr.name)
+        list_type = self._env.lookup_variable(expr.loc, expr.name)
 
         # Determine the type of the list element.
         elem_type = None

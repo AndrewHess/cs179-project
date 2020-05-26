@@ -1,8 +1,12 @@
+from analyzer import Analyzer
 import error
 from expr import ExprEnum
 from parser import Parser
 from type import Type
 from type_checker import TypeChecker
+
+import math
+
 
 # Map from primitive binary function name to the cpp equivalent function name.
 # Note: If this is updated, Parser.parse() must also be updated for the new
@@ -34,12 +38,37 @@ prim_other_funcs = {'print': 'printf',
 
 class Generator:
     ''' A class to read parsed code and output C++ and CUDA code. '''
-    def __init__(self, _in_filename, _out_filename):
-        self.in_filename = _in_filename
-        self.out_filename = _out_filename
-        self._out_file = None    # The result from open(_out_filename)
-        self._indent_jump = 4    # The number of spaces a single indent uses
-        self._indent = ''        # String of spaces for indenting output code
+    def __init__(self, _filename):
+        # THe filename should be something like /path/to/file.code, so we can
+        # extract the extensionless filename: /path/to/code and add extensions
+        # for the other required file types. We also extract the base file name
+        # without extension: "file". Finally, we extract the path: /path/to
+        dot_pos = -1
+        for i in range(len(_filename) - 1, -1, -1):
+            if _filename[i] == '.':
+                dot_pos = i
+                break
+
+        if dot_pos == -1:
+            raise NameError(f'file {_filename} has no file extension')
+
+        self._filename_no_ext = _filename[:dot_pos]
+
+        last_slash_pos = -1
+        for i in range(dot_pos - 1, -1, -1):
+            if _filename[i] == '/':
+                last_slash_pos = i
+                break
+
+        self._base_filename_no_ext = _filename[last_slash_pos + 1: dot_pos]
+        self._path = _filename[:last_slash_pos]
+
+        self.in_filename = _filename
+        self.cpp_prototypes = []    # List of strings (function prototypes)
+        self.cuda_prototypes = []   # List of strings (function prototypes)
+        self._indent_jump = 4       # The number of spaces a single indent uses
+        self._indent = ''           # String of spaces for indenting output code
+        self._para_loop_ind = 0     # The number of parallelized loops so far
 
 
     def _increase_indent(self):
@@ -102,6 +131,8 @@ class Generator:
         elif expr.exprClass == ExprEnum.PRIM_FUNC:
             # There is no need to translate primitive functions into C++/CUDA.
             return ('', '')
+        elif expr.exprClass == ExprEnum.PARA_LOOP:
+            return self.__translate_parallel_loop_expr(expr, end)
         else:
             error_str = f'unknown expression type: {expr.exprClass}'
             raise error.InternalError(expr.loc, error_str)
@@ -137,13 +168,15 @@ class Generator:
         cpp = ''
         cuda = ''
         if expr.type == Type.INT:
-            (c, _) = self.__translate_expr(expr.val, False)
+            (c, cu) = self.__translate_expr(expr.val, False)
             cpp = f'int {expr.name} = {c}'
             cpp += ';\n' if end else ''
+            cuda += cu
         elif expr.type == Type.FLOAT:
-            (c, _) = self.__translate_expr(expr.val, False)
+            (c, cu) = self.__translate_expr(expr.val, False)
             cpp = f'float {expr.name} = {c}'
             cpp += ';\n' if end else ''
+            cuda += cu
         elif expr.type == Type.STRING:
             if expr.val.exprClass == ExprEnum.LITERAL:
                 size = len(expr.val.val) + 1  # Add 1 for the null terminator.
@@ -156,9 +189,10 @@ class Generator:
                 cpp += ';\n' if end else ''
             elif expr.val.exprClass == ExprEnum.GET_VAR or \
                  expr.val.exprClass == ExprEnum.CALL:
-                (c, _) = self.__translate_expr(expr.val, False)
+                (c, cu) = self.__translate_expr(expr.val, False)
                 cpp = f'char *{expr.name} = {c}'
                 cpp += ';\n' if end else ''
+                cuda += cu
             else:
                 raise error.Syntax(expr.loc, 'invalid string initialization')
 
@@ -190,9 +224,10 @@ class Generator:
                   f'*{expr.name} = {expr.val}'
             cpp += ';\n' if end else ''
         else:
-            (c, _) = self.__translate_expr(expr.val, False)
+            (c, cu) = self.__translate_expr(expr.val, False)
             cpp = f'{expr.name} = {c}'
             cpp += ';\n' if end else ''
+            cuda += cu
 
         cpp = self._make_indented(cpp)
         return (cpp, cuda)
@@ -235,13 +270,19 @@ class Generator:
         if len(expr.args) > 0:
             (arg_type, arg_name) = expr.args[-1]
             cpp += f'{Type.enum_to_c_type(expr.loc, arg_type)} {arg_name}'
-        cpp += ') {\n'
+        cpp += ')'
+
+        # Add this prototype for use in a header file.
+        self.cpp_prototypes.append(cpp + ';\n')
+
+        cpp += ' {\n'
 
         # Add the body of the function.
         body_cpp = ''
         for e in expr.body[:-1]:
-            (c, _) = self.__translate_expr(e, True)
+            (c, cu) = self.__translate_expr(e, True)
             body_cpp += c
+            cuda += cu
 
         # The last expression should be returned.
         if len(expr.body) == 0:
@@ -255,8 +296,9 @@ class Generator:
             error_str = 'expected literal, get, or call as last body expression'
             raise error.Syntax(expr.loc, error_str)
 
-        (c, _) = self.__translate_expr(e, False)
+        (c, cu) = self.__translate_expr(e, False)
         body_cpp += f'return {c};\n'
+        cuda += cu
 
         self._increase_indent()
         body_cpp = self._make_indented(body_cpp)
@@ -337,13 +379,15 @@ class Generator:
 
         # Add the arguments.
         for e in expr.params[:-1]:
-            (c, _) = self.__translate_expr(e, False)
+            (c, cu) = self.__translate_expr(e, False)
             cpp += f'{c}, '
+            cuda += cu
 
         # The last argument should not have a following comma.
         if len(expr.params) > 0:
-            (c, _) = self.__translate_expr(expr.params[-1], False)
+            (c, cu) = self.__translate_expr(expr.params[-1], False)
             cpp += f'{c}'
+            cuda += cu
 
         cpp += ')'
         cpp += ';\n' if end else ''
@@ -368,16 +412,18 @@ class Generator:
 
         # Add the 'then' statements.
         for e in expr.then:
-            (c, _) = self.__translate_expr(e, end=False)
+            (c, cu) = self.__translate_expr(e, end=False)
             cpp += (' ' * self._indent_jump) + f'{c};\n'
+            cuda += cu
 
         # Close the 'if' section and start the 'else' section.
         cpp += '} else {\n'
 
         # Add the 'else' statements.
         for e in expr.otherwise:
-            (c, _) = self.__translate_expr(e, end=False)
+            (c, cu) = self.__translate_expr(e, end=False)
             cpp += (' ' * self._indent_jump) + f'{c};\n'
+            cuda += cu
 
         # Close the 'else' block.
         cpp += '}\n'
@@ -406,8 +452,9 @@ class Generator:
 
         # Add the body expressions.
         for e in expr.body:
-            (c, _) = self.__translate_expr(e, end=False)
+            (c, cu) = self.__translate_expr(e, end=False)
             cpp += (' ' * self._indent_jump) + f'{c};\n'
+            cuda += cu
 
         # Close the loop.
         cpp += '}\n'
@@ -472,6 +519,186 @@ class Generator:
         return (cpp, cuda)
 
 
+    def __translate_parallel_loop_expr(self, expr, end=True):
+        ''' Get a single parsed PARA_LOOP expression and return the equivalent
+            C++ and CUDA code.
+
+            If 'end' is false, then the final characters of the expression,
+            like semi-colons and newlines, are not added.
+        '''
+
+        cpp = ''
+        cuda = ''
+
+        # Get a unique name for the cuda kernel.
+        self._para_loop_ind += 1
+        cuda_kernel_name = f'cuda_loop{self._para_loop_ind}_kernel'
+
+        # Determine the number of blocks and threads to use.
+        threads_per_block = min(512, expr.iterations)
+        blocks = min(32, math.ceil(expr.iterations / threads_per_block))
+
+        # Make device variables if necessary.
+        dev_vars = []
+        dev_lists = []
+        for var_name in expr.used_vars:
+            dev_name = f'dev_{var_name}'
+            var_type = expr.env.lookup_variable(expr.loc, var_name)
+
+            print(f'setting up device variable for {var_name} with type {var_type}')
+
+            if var_type == Type.INT or var_type == Type.FLOAT:
+                dev_vars.append(var_name)
+            elif var_type == Type.LIST_INT:
+                dev_lists.append(dev_name)
+
+                # TODO: use the actual size of the list. This can be a little
+                #       difficult becuase the list could be passed through a
+                #       function.
+                size = expr.start_index + expr.iterations
+                size_str = f'{size} * sizeof(int)'
+
+                # Allocate memory.
+                cpp += f'int *{dev_name};\n'
+                cpp += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
+
+                # Copy the data from host to device.
+                cpp += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
+                cpp += f'cudaMemcpyHostToDevice);\n'
+            elif var_type == Type.LIST_FLOAT:
+                dev_lists.append(dev_name)
+
+                # TODO: use the actual size of the list. This can be a little
+                #       difficult becuase the list could be passed through a
+                #       function.
+                size = expr.start_index + expr.iterations
+                size_str = f'{size} * sizeof(float)'
+
+                # Allocate memory.
+                cpp += f'float *{dev_name};\n'
+                cpp += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
+
+                # Copy the data from host to device.
+                cpp += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
+                cpp += f'cudaMemcpyHostToDevice);\n'
+            elif var_type == Type.STRING or var_type == Type.LIST_STRING:
+                error_str = 'strings not yet allowed in parallelization'
+                raise error.InternalError(expr.loc, error_str)
+
+        # Call the kernel.
+        cpp += f'{cuda_kernel_name}<<<{blocks}, {threads_per_block}>>>'
+        cpp += f'({", ".join(dev_lists)}'
+        if len(dev_lists) != 0 and len(dev_vars) != 0:
+            cpp += ', &'
+        elif len(dev_vars) != 0:
+            cpp += '&'
+
+        cpp += f'{", &".join(dev_vars)});\n'
+
+
+        # Copy the data back from device to host.
+        for var_name in expr.used_vars:
+            dev_name = f'dev_{var_name}'
+            var_type = expr.env.lookup_variable(expr.loc, var_name)
+
+            if var_type == Type.INT or var_type == Type.FLOAT:
+                # There is no need to copy the variable back, because C++
+                # passes it by value and so the value did not change.
+                pass
+            elif var_type == Type.LIST_INT:
+                # TODO: use the actual size of the list. This can be a little
+                #       difficult becuase the list could be passed through a
+                #       function.
+                size = expr.start_index + expr.iterations
+                size_str = f'{size} * sizeof(int)'
+
+                # Copy the data from host to device.
+                cpp += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
+                cpp += f'cudaMemcpyDeviceToHost);\n'
+            elif var_type == Type.LIST_FLOAT:
+                # TODO: use the actual size of the list. This can be a little
+                #       difficult becuase the list could be passed through a
+                #       function.
+                size = expr.start_index + expr.iterations
+                size_str = f'{size} * sizeof(float)'
+
+                # Copy the data from host to device.
+                cpp += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
+                cpp += f'cudaMemcpyDeviceToHost);\n'
+            elif var_type == Type.STRING or var_type == Type.LIST_STRING:
+                error_str = 'strings not yet allowed in parallelization'
+                raise error.InternalError(expr.loc, error_str)
+
+        # Put the code in a new scope because we create variables that are not
+        # named by the user, so they may cause name conflicts if they were not
+        # in a new scope.
+        self._increase_indent()
+        cpp = self._make_indented(cpp)
+        self._decrease_indent()
+
+        cpp = self._make_indented('{\n') + cpp + self._make_indented('}\n')
+
+        # Setup the cuda code.
+        # No return value is needed because results are returned via the input
+        # lists.
+        cuda += f'__global__ void {cuda_kernel_name}'
+
+        # Add the arguments.
+        args = []
+        for var_name in expr.used_vars:
+            var_type = expr.env.lookup_variable(expr.loc, var_name)
+            c_type = Type.enum_to_c_type(expr.loc, var_type)
+
+            if var_type == Type.INT or var_type == Type.FLOAT:
+                c_type += ' *'
+
+            if var_name in dev_vars:
+                var_name = f'dev_{var_name}'
+
+            args.append(f'{c_type} {var_name}')
+
+        cuda += f'({", ".join(args)})'
+
+        # Add this function prototype for use in a header file.
+        self.cuda_prototypes.append(cuda + ';\n')
+
+        cuda += ' {\n'
+
+        # Setup any non-list parameters.
+        for var_name in dev_vars:
+            var_type = expr.env.lookup_variable(expr.loc, var_name)
+
+            if var_type == Type.INT:
+                cuda += f'    int {var_name} = *dev_{var_name};\n'
+            if var_type == Type.FLOAT:
+                cuda += f'    float {var_name} = *dev_{var_name};\n'
+
+        # Determine the index in the loop.
+        index = expr.index_name
+        cuda += f'    int {index} = blockIdx.x * blockDim.x + threadIdx.x;\n\n'
+
+        # Loop over all indices that this thread is responsible for.
+        cuda += f'    while ({index} < {expr.iterations}) {"{"}\n'
+
+        for e in expr.body:
+            (c, _) = self.__translate_expr(e);
+            cuda += c
+
+        cuda += f'        {index} += gridDim.x * blockDim.x;\n'
+        cuda += f'    {"}"}\n'
+
+        # Save the values of non-list variables.
+        for var_name in dev_vars:
+            var_type = expr.env.lookup_variable(expr.loc, var_name)
+
+            if var_type == Type.INT or var_type == Type.FLOAT:
+                cuda += f'    *dev_{var_name} = {var_name};\n'
+
+        cuda += f'{"}"}\n\n'
+
+        return (cpp, cuda)
+
+
     def generate(self):
         '''
         Get the parsed code from the input file and write equivalent C++ and
@@ -484,31 +711,156 @@ class Generator:
             # Parse the code.
             parsed_exprs = p.parse()
 
-            # Typecheck the code.
+            # Typecheck the code. This also updates the type of some of the
+            # parsed expressions (updates from unknown type to known type) and
+            # addes environment data to the expressions.
             type_checker = TypeChecker(parsed_exprs)
             type_checker.validate_exprs()
+
+            # Analyze the code to see if some parts can be marked to run in
+            # parallel.
+            analyzer = Analyzer(parsed_exprs)
+            analyzer.analyze()
         except error.Error as e:
             e.print()
             exit(1)
 
         # Include some useful libraries.
-        self._out_file = open(self.out_filename, 'w')
-        self._out_file.write('#include <stdio.h>\n')
-        self._out_file.write('#include <stdlib.h>\n')
-        self._out_file.write('#include <time.h>\n')
-        self._out_file.write('\n')
+        cpp_file = open(self._filename_no_ext + '.cpp', 'w')
+        cpp_file.write('#include <stdio.h>\n')
+        cpp_file.write('#include <stdlib.h>\n')
+        cpp_file.write('#include <time.h>\n')
+        cpp_file.write('\n')
+        cpp_file.write(f'#include "{self._base_filename_no_ext + ".hpp"}"\n')
+        cpp_file.write('\n')
+
+        cuda_file = open(self._filename_no_ext + '.cu', 'w')
+        cuda_file.write('#include <cuda_runtime.h>\n')
+        cuda_file.write('\n')
+        cuda_file.write(f'#include "{self._base_filename_no_ext + ".cuh"}"\n')
+        cuda_file.write('\n')
 
         # Convert each expression to C++ and CUDA code, writing the result to
         # the output file.
         for expr in parsed_exprs:
             (cpp, cuda) = self.__translate_expr(expr)
-            self._out_file.write(cpp)
+            cpp_file.write(cpp)
+            cuda_file.write(cuda)
 
-        self._out_file.close()
+        cpp_file.close()
+
+        # Write the header files.
+        # TODO: add include guards to the header files.
+        hpp_file = open(self._filename_no_ext + '.hpp', 'w')
+
+        for proto in self.cpp_prototypes:
+            hpp_file.write(proto)
+
+        cuh_file = open(self._filename_no_ext + '.cuh', 'w')
+        for proto in self.cuda_prototypes:
+            cuh_file.write(proto)
+
+        # Write the Makefile.
+        makefile = open(self._path + '/Makefile', 'w')
+        makefile.write('''# Product Names
+CUDA_OBJ = cuda.o
+
+# Input Names
+CUDA_FILES = src/blur.cu
+CPP_FILES = src/blur.cpp
+
+# ------------------------------------------------------------------------------
+
+# CUDA Compiler and Flags
+CUDA_PATH = /usr/local/cuda
+CUDA_INC_PATH = $(CUDA_PATH)/include
+CUDA_BIN_PATH = $(CUDA_PATH)/bin
+CUDA_LIB_PATH = $(CUDA_PATH)/lib64
+
+NVCC = $(CUDA_BIN_PATH)/nvcc
+
+# OS-architecture specific flags
+# OS-architecture specific flags
+ifeq ($(OS_SIZE),32)
+NVCC_FLAGS := -m32
+else
+NVCC_FLAGS := -m64
+endif
+NVCC_FLAGS += -g -dc -Wno-deprecated-gpu-targets --std=c++11 \
+             --expt-relaxed-constexpr
+NVCC_INCLUDE =
+NVCC_LIBS =
+NVCC_GENCODES = -gencode arch=compute_30,code=sm_30 \
+        -gencode arch=compute_35,code=sm_35 \
+        -gencode arch=compute_50,code=sm_50 \
+        -gencode arch=compute_52,code=sm_52 \
+        -gencode arch=compute_60,code=sm_60 \
+        -gencode arch=compute_61,code=sm_61 \
+        -gencode arch=compute_61,code=compute_61
+
+# CUDA Object Files
+CUDA_OBJ_FILES = $(notdir $(addsuffix .o, $(CUDA_FILES)))
+
+# ------------------------------------------------------------------------------
+
+# CUDA Linker and Flags
+CUDA_LINK_FLAGS = -dlink -Wno-deprecated-gpu-targets
+
+# ------------------------------------------------------------------------------
+
+# C++ Compiler and Flags
+GPP = g++
+FLAGS = -g -Wall -D_REENTRANT -std=c++0x -pthread
+INCLUDE = -I$(CUDA_INC_PATH)
+LIBS = -L$(CUDA_LIB_PATH) -lcudart -lcufft -lsndfile
+
+# ------------------------------------------------------------------------------
+# Make Rules (Lab 1 specific)
+# ------------------------------------------------------------------------------
+
+# C++ Object Files
+OBJ_AUDIO = $(addprefix audio-, $(notdir $(addsuffix .o, $(CPP_FILES))))
+OBJ_NOAUDIO = $(addprefix noaudio-, $(notdir $(addsuffix .o, $(CPP_FILES))))
+
+# Top level rules
+all: audio noaudio
+
+audio: $(OBJ_AUDIO) $(CUDA_OBJ) $(CUDA_OBJ_FILES)
+    $(GPP) $(FLAGS) -o audio-blur $(INCLUDE) $^ $(LIBS)
+
+noaudio: $(OBJ_NOAUDIO) $(CUDA_OBJ) $(CUDA_OBJ_FILES)
+    $(GPP) $(FLAGS) -o noaudio-blur $(INCLUDE) $^ $(LIBS)
+
+
+# Compile C++ Source Files
+audio-%.cpp.o: src/%.cpp
+    $(GPP) $(FLAGS) -D AUDIO_ON=1 -c -o $@ $(INCLUDE) $<
+
+noaudio-%.cpp.o: src/%.cpp
+    $(GPP) $(FLAGS) -D AUDIO_ON=0 -c -o $@ $(INCLUDE) $<
+
+
+# Compile CUDA Source Files
+%.cu.o: src/%.cu
+    $(NVCC) $(NVCC_FLAGS) $(NVCC_GENCODES) -c -o $@ $(NVCC_INCLUDE) $<
+
+cuda: $(CUDA_OBJ_FILES) $(CUDA_OBJ)
+
+# Make linked device code
+$(CUDA_OBJ): $(CUDA_OBJ_FILES)
+    $(NVCC) $(CUDA_LINK_FLAGS) $(NVCC_GENCODES) -o $@ $(NVCC_INCLUDE) $^
+
+
+# Clean everything including temporary Emacs files
+clean:
+    rm -f audio-blur noaudio-blur *.o *~
+    rm -f src/*~
+
+.PHONY: clean''')
 
 
 def main():
-    g = Generator('examples/add_lists.zb', 'examples/add_lists.cpp')
+    g = Generator('examples/add_lists.zb')
     g.generate()
 
 main()
