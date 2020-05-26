@@ -538,6 +538,25 @@ class Generator:
         threads_per_block = min(512, expr.iterations)
         blocks = min(32, math.ceil(expr.iterations / threads_per_block))
 
+        # Setup the function to call the kernel.
+        args = []
+        for var_name in expr.used_vars:
+            var_type = expr.env.lookup_variable(expr.loc, var_name)
+            c_type = Type.enum_to_c_type(expr.loc, var_type)
+
+            args.append(f'{c_type} {var_name}')
+
+        cuda += f'void call_{cuda_kernel_name}'
+        cuda += f'({", ".join(args)})'
+        self.cuda_prototypes.append(cuda + ';\n')
+
+        # Call this kernel-calling fucntion in the cpp code.
+        cpp += f'call_{cuda_kernel_name}'
+        cpp += f'({", ".join(expr.used_vars)});\n'
+
+        cuda += ' {\n'
+        cuda_body = ''
+
         # Make device variables if necessary.
         dev_vars = []
         for var_name in expr.used_vars:
@@ -558,12 +577,12 @@ class Generator:
                 size_str = f'{size} * sizeof(int)'
 
                 # Allocate memory.
-                cpp += f'int *{dev_name};\n'
-                cpp += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
+                cuda_body += f'int *{dev_name};\n'
+                cuda_body += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
 
                 # Copy the data from host to device.
-                cpp += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
-                cpp += f'cudaMemcpyHostToDevice);\n'
+                cuda_body += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
+                cuda_body += f'cudaMemcpyHostToDevice);\n'
             elif var_type == Type.LIST_FLOAT:
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
@@ -572,19 +591,19 @@ class Generator:
                 size_str = f'{size} * sizeof(float)'
 
                 # Allocate memory.
-                cpp += f'float *{dev_name};\n'
-                cpp += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
+                cuda_body += f'float *{dev_name};\n'
+                cuda_body += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
 
                 # Copy the data from host to device.
-                cpp += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
-                cpp += f'cudaMemcpyHostToDevice);\n'
+                cuda_body += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
+                cuda_body += f'cudaMemcpyHostToDevice);\n'
             elif var_type == Type.STRING or var_type == Type.LIST_STRING:
                 error_str = 'strings not yet allowed in parallelization'
                 raise error.InternalError(expr.loc, error_str)
 
         # Call the kernel.
-        cpp += f'{cuda_kernel_name}<<<{blocks}, {threads_per_block}>>>'
-        cpp += f'({", ".join(dev_vars)});\n'
+        cuda_body += f'{cuda_kernel_name}<<<{blocks}, {threads_per_block}>>>'
+        cuda_body += f'({", ".join(dev_vars)});\n'
 
         # Copy the data back from device to host.
         for var_name in expr.used_vars:
@@ -603,8 +622,8 @@ class Generator:
                 size_str = f'{size} * sizeof(int)'
 
                 # Copy the data from host to device.
-                cpp += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
-                cpp += f'cudaMemcpyDeviceToHost);\n'
+                cuda_body += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
+                cuda_body += f'cudaMemcpyDeviceToHost);\n'
             elif var_type == Type.LIST_FLOAT:
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
@@ -613,61 +632,48 @@ class Generator:
                 size_str = f'{size} * sizeof(float)'
 
                 # Copy the data from host to device.
-                cpp += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
-                cpp += f'cudaMemcpyDeviceToHost);\n'
+                cuda_body += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
+                cuda_body += f'cudaMemcpyDeviceToHost);\n'
             elif var_type == Type.STRING or var_type == Type.LIST_STRING:
                 error_str = 'strings not yet allowed in parallelization'
                 raise error.InternalError(expr.loc, error_str)
 
-        # Put the code in a new scope because we create variables that are not
-        # named by the user, so they may cause name conflicts if they were not
-        # in a new scope.
         self._increase_indent()
-        cpp = self._make_indented(cpp)
+        cuda_body = self._make_indented(cuda_body)
         self._decrease_indent()
 
-        cpp = self._make_indented('{\n') + cpp + self._make_indented('}\n')
+        cuda += cuda_body + '}\n\n'
 
         # Setup the cuda code.
         # No return value is needed because results are returned via the input
         # lists.
-        cuda += f'__global__ void {cuda_kernel_name}'
+        cuda_kernel = f'__global__ void {cuda_kernel_name}'
 
         # Add the arguments.
-        args = []
-        for var_name in expr.used_vars:
-            var_type = expr.env.lookup_variable(expr.loc, var_name)
-            c_type = Type.enum_to_c_type(expr.loc, var_type)
-
-            if var_type == Type.INT or var_type == Type.FLOAT:
-                c_type += ' *'
-
-            if var_name in dev_vars:
-                var_name = f'dev_{var_name}'
-
-            args.append(f'{c_type} {var_name}')
-
-        cuda += f'({", ".join(args)})'
+        cuda_kernel += f'({", ".join(args)})'
 
         # Add this function prototype for use in a header file.
-        self.cuda_prototypes.append(cuda + ';\n')
+        self.cuda_prototypes.append(cuda_kernel + ';\n')
 
-        cuda += ' {\n'
+        cuda_kernel += ' {\n'
 
         # Determine the index in the loop.
         index = expr.index_name
-        cuda += f'    int {index} = blockIdx.x * blockDim.x + threadIdx.x;\n\n'
+        cuda_kernel += f'    int {index} = blockIdx.x * blockDim.x + '
+        cuda_kernel += f'threadIdx.x;\n\n'
 
         # Loop over all indices that this thread is responsible for.
-        cuda += f'    while ({index} < {expr.iterations}) {"{"}\n'
+        cuda_kernel += f'    while ({index} < {expr.iterations}) {"{"}\n'
 
         for e in expr.body:
             (c, _) = self.__translate_expr(e);
-            cuda += c
+            cuda_kernel += c
 
-        cuda += f'        {index} += gridDim.x * blockDim.x;\n'
-        cuda += f'    {"}"}\n'
-        cuda += f'{"}"}\n\n'
+        cuda_kernel += f'        {index} += gridDim.x * blockDim.x;\n'
+        cuda_kernel += f'    {"}"}\n'
+        cuda_kernel += f'{"}"}\n\n'
+
+        cuda += cuda_kernel
 
         return (cpp, cuda)
 
@@ -710,6 +716,7 @@ class Generator:
         cpp_file.write('#include <time.h>\n')
         cpp_file.write('\n')
         cpp_file.write(f'#include "{self._base_filename_no_ext + ".hpp"}"\n')
+        cpp_file.write(f'#include "{self._base_filename_no_ext + ".cuh"}"\n')
         cpp_file.write('\n')
 
         cuda_file = open(self._filename_no_ext + '.cu', 'w')
