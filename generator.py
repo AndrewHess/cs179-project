@@ -784,10 +784,3 @@ class Generator:
         m += f'.PHONY: clean full_clean\n'
 
         makefile.write(m)
-
-
-def main():
-    g = Generator('examples/add_lists.zb')
-    g.generate(False)
-
-main()
