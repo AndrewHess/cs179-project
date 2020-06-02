@@ -103,9 +103,9 @@ class Type(Enum):
         elif type_enum == Type.STRING:
             return 'char *'
         elif type_enum == Type.LIST_INT:
-            return 'int *'
+            return 'int_list'
         elif type_enum == Type.LIST_FLOAT:
-            return 'float *'
+            return 'float_list'
         elif type_enum == Type.LIST_STRING:
             return 'char **'
         else:

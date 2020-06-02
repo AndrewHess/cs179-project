@@ -53,6 +53,10 @@ class Env:
 
         self.env.append((name, type_lst, is_var))
 
+        if type_lst == [Type.LIST_INT] or type_lst == [Type.LIST_FLOAT] or \
+           type_lst == [Type.LIST_STRING]:
+            self.env.append((f'{name}.size', [Type.INT], True))
+
 
     def name_in_scope(self, name):
         ''' Check if the given name is in the current scope. '''
@@ -80,7 +84,7 @@ class Env:
                 return entry
 
         # The given name is not in the environment.
-        return (None, None)
+        return (None, None, None)
 
 
     def lookup_variable(self, loc, expr_name):

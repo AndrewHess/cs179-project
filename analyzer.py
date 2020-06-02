@@ -215,6 +215,10 @@ class Analyzer:
         used_not_created = []
 
         for x in used:
+            if '.' in x:
+                assert(len(x) > 5 and x[-5:] == '.size')
+                x = x[:-5]
+
             if x not in created and x not in used_not_created:
                 used_not_created.append(x)
 
@@ -408,6 +412,10 @@ class Analyzer:
         (used_variables, _) = self.__deep_used_not_created(expr, [])
 
         for var in referenced_variables:
+            if '.' in var:
+                assert(len(var) > 5 and var[-5:] == '.size')
+                var = var[:-5]
+
             if var not in used_variables:
                 used_variables.append(var)
 

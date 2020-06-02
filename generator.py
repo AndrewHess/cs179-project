@@ -474,9 +474,17 @@ class Generator:
         cpp = ''
         cuda = ''
 
-        cpp += f'{Type.enum_to_c_type(expr.loc, expr.elem_type)} '
-        cpp += f'{expr.name}[{self.__translate_expr(expr.size, end=False)[0]}]'
-        cpp += ';\n' if end else ''
+        name = f'{expr.name}'
+        size = f'{self.__translate_expr(expr.size, end=False)[0]}'
+        elem_type = f'{Type.enum_to_c_type(expr.loc, expr.elem_type)}'
+
+        cpp += f'struct {elem_type}_list {name} = {"{"}{size}, 0{"}"};\n'
+        cpp += f'{elem_type} struct_list_{name}_data[{size}];\n'
+        cpp += f'{name}.data = struct_list_{name}_data;\n\n'
+
+        # cpp += f'{Type.enum_to_c_type(expr.loc, expr.elem_type)}_list '
+        # cpp += f'{expr.name}[{self.__translate_expr(expr.size, end=False)[0]}]'
+        # cpp += ';\n' if end else ''
 
         cpp = self._make_indented(cpp)
         return (cpp, cuda)
@@ -493,7 +501,8 @@ class Generator:
         cpp = ''
         cuda = ''
 
-        cpp += f'{expr.name}[{self.__translate_expr(expr.index, end=False)[0]}]'
+        index = f'{self.__translate_expr(expr.index, end=False)[0]}'
+        cpp += f'{expr.name}.data[{index}]'
         cpp += ';\n' if end else ''
 
         cpp = self._make_indented(cpp)
@@ -511,7 +520,8 @@ class Generator:
         cpp = ''
         cuda = ''
 
-        cpp += f'{expr.name}[{self.__translate_expr(expr.index, end=False)[0]}]'
+        index = f'{self.__translate_expr(expr.index, end=False)[0]}'
+        cpp += f'{expr.name}.data[{index}]'
         cpp += f' = {self.__translate_expr(expr.val, end=False)[0]}'
         cpp += ';\n' if end else ''
 
@@ -741,16 +751,43 @@ class Generator:
 
         cpp_file.close()
 
-        # Write the header files.
-        # TODO: add include guards to the header files.
+        # Write the C++ header file.
         hpp_file = open(self._filename_no_ext + '.hpp', 'w')
+
+        hpp_file.write(f'#ifndef {self._base_filename_no_ext.upper()}_HPP\n')
+        hpp_file.write(f'#define {self._base_filename_no_ext.upper()}_HPP\n\n')
+
+        hpp_file.write('struct int_list {\n')
+        hpp_file.write('    int size;\n')
+        hpp_file.write('    int *data;\n')
+        hpp_file.write('};\n\n')
+
+        hpp_file.write('struct float_list {\n')
+        hpp_file.write('    int size;\n')
+        hpp_file.write('    float *data;\n')
+        hpp_file.write('};\n\n')
+
+        hpp_file.write('struct char_list {\n')
+        hpp_file.write('    int size;\n')
+        hpp_file.write('    char *data;\n')
+        hpp_file.write('};\n\n')
 
         for proto in self.cpp_prototypes:
             hpp_file.write(proto)
+        hpp_file.write('\n')
 
+        hpp_file.write(f'#endif\n')
+
+        # Write the CUDA header file.
         cuh_file = open(self._filename_no_ext + '.cuh', 'w')
+        cuh_file.write(f'#ifndef {self._base_filename_no_ext.upper()}_CUH\n')
+        cuh_file.write(f'#define {self._base_filename_no_ext.upper()}_CUH\n\n')
+
         for proto in self.cuda_prototypes:
             cuh_file.write(proto)
+        cuh_file.write('\n')
+
+        cuh_file.write(f'#endif\n')
 
         # Write the Makefile.
         makefile = open(self._path + '/Makefile', 'w')

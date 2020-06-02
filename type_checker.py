@@ -51,7 +51,7 @@ class TypeChecker:
         elif expr.exprClass == ExprEnum.LIST_SET:
             self.__validate_list_set_expr_type(expr)
         elif expr.exprClass == ExprEnum.PRIM_FUNC:
-            self.__validate_list_prim_func_type(expr)
+            self.__validate_prim_func_type(expr)
         else:
             error_str = f'unknown expression type: {expr.exprClass}'
             raise error.InternalError(expr.loc, error_str)
@@ -326,7 +326,7 @@ class TypeChecker:
         self.__validate_type_of_expr(expr.val.loc, elem_type, expr.val)
 
 
-    def __validate_list_prim_func_type(self, expr):
+    def __validate_prim_func_type(self, expr):
         ''' Add environment data for a single PrimFunc Expr. '''
 
         # PrimFunc expressions don't have a body so there is not much to
