@@ -575,54 +575,49 @@ class Generator:
         dev_vars = []
         for var_name in expr.used_vars:
             dev_name = f'dev_{var_name}'
+            data_name = f'{dev_name}_data'  # Only used for lists.
             var_type = expr.env.lookup_variable(expr.loc, var_name)
 
             if var_type == Type.INT or var_type == Type.FLOAT:
                 dev_vars.append(var_name)
             elif var_type == Type.LIST_INT:
                 dev_vars.append(dev_name)
-                # TODO: use the actual size of the list. This can be a little
-                #       difficult becuase the list could be passed through a
-                #       function.
-                size_str = f'({sub_expr_str(expr.start_index)} + '
-                size_str += f'{sub_expr_str(expr.iterations)})'
-                size_str += f' * sizeof(int)'
 
                 # Allocate memory.
-                cuda_body += f'int *{dev_name};\n'
-                cuda_body += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
+                size = f'{var_name}.size * sizeof(int)'
+                cuda_body += f'int *{data_name};\n'
+                cuda_body += f'cudaMalloc((void **) &{data_name}, {size});\n'
 
                 # Copy the data from host to device.
-                cuda_body += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
-                cuda_body += f'cudaMemcpyHostToDevice);\n'
+                cuda_body += f'cudaMemcpy({data_name}, {var_name}.data, ' + \
+                             f'{size}, cudaMemcpyHostToDevice);\n'
+                cuda_body += f'int_list {dev_name} = {"{"}{var_name}.size, ' + \
+                             f'{data_name}{"}"};\n\n'
             elif var_type == Type.LIST_FLOAT:
                 dev_vars.append(dev_name)
 
-                # TODO: use the actual size of the list. This can be a little
-                #       difficult becuase the list could be passed through a
-                #       function.
-                size_str = f'({sub_expr_str(expr.start_index)} + '
-                size_str += f'{sub_expr_str(expr.iterations)})'
-                size_str += f' * sizeof(float)'
-
                 # Allocate memory.
-                cuda_body += f'float *{dev_name};\n'
-                cuda_body += f'cudaMalloc((void **) &{dev_name}, {size_str});\n'
+                size = f'{var_name}.size * sizeof(float)'
+                cuda_body += f'float *{data_name};\n'
+                cuda_body += f'cudaMalloc((void **) &{data_name}, {size});\n'
 
                 # Copy the data from host to device.
-                cuda_body += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
-                cuda_body += f'cudaMemcpyHostToDevice);\n'
+                cuda_body += f'cudaMemcpy({data_name}, {var_name}.data, ' + \
+                             f'{size}, cudaMemcpyHostToDevice);\n'
+                cuda_body += f'float_list {dev_name} = {"{"}' + \
+                             f'{var_name}.size, {data_name}{"}"};\n\n'
             elif var_type == Type.STRING or var_type == Type.LIST_STRING:
                 error_str = 'strings not yet allowed in parallelization'
                 raise error.InternalError(expr.loc, error_str)
 
         # Call the kernel.
         cuda_body += f'{cuda_kernel_name}<<<{blocks}, {threads_per_block}>>>'
-        cuda_body += f'({", ".join(dev_vars)});\n'
+        cuda_body += f'({", ".join(dev_vars)});\n\n'
 
         # Copy the data back from device to host.
         for var_name in expr.used_vars:
             dev_name = f'dev_{var_name}'
+            data_name = f'{dev_name}_data'
             var_type = expr.env.lookup_variable(expr.loc, var_name)
 
             if var_type == Type.INT or var_type == Type.FLOAT:
@@ -630,26 +625,16 @@ class Generator:
                 # passes it by value and so the value did not change.
                 pass
             elif var_type == Type.LIST_INT:
-                # TODO: use the actual size of the list. This can be a little
-                #       difficult becuase the list could be passed through a
-                #       function.
-                size_str = f'({sub_expr_str(expr.start_index)} + '
-                size_str += f'{sub_expr_str(expr.iterations)})'
-                size_str += f' * sizeof(int)'
+                size = f'{var_name}.size * sizeof(int)'
 
                 # Copy the data from host to device.
-                cuda_body += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
+                cuda_body += f'cudaMemcpy({var_name}, {data_name}, {size}, '
                 cuda_body += f'cudaMemcpyDeviceToHost);\n'
             elif var_type == Type.LIST_FLOAT:
-                # TODO: use the actual size of the list. This can be a little
-                #       difficult becuase the list could be passed through a
-                #       function.
-                size_str = f'({sub_expr_str(expr.start_index)} + '
-                size_str += f'{sub_expr_str(expr.iterations)})'
-                size_str += f' * sizeof(float)'
+                size = f'{var_name}.size * sizeof(float)'
 
                 # Copy the data from host to device.
-                cuda_body += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
+                cuda_body += f'cudaMemcpy({var_name}, {data_name}, {size}, '
                 cuda_body += f'cudaMemcpyDeviceToHost);\n'
             elif var_type == Type.STRING or var_type == Type.LIST_STRING:
                 error_str = 'strings not yet allowed in parallelization'
@@ -782,6 +767,8 @@ class Generator:
         cuh_file = open(self._filename_no_ext + '.cuh', 'w')
         cuh_file.write(f'#ifndef {self._base_filename_no_ext.upper()}_CUH\n')
         cuh_file.write(f'#define {self._base_filename_no_ext.upper()}_CUH\n\n')
+
+        cuh_file.write(f'#include "{self._base_filename_no_ext + ".hpp"}"\n\n')
 
         for proto in self.cuda_prototypes:
             cuh_file.write(proto)
