@@ -1,6 +1,6 @@
-(define int add_lists : list int a list int b list int c :
+(define int add_lists : list int a list int b list int c int size :
     (loop (val int i (lit 0))
-          (call < : (get i) (lit 16384))
+          (call < : (get i) (get size))
           (set i (call + : (get i) (lit 1)))
     do
         (val int ai (list_at a (get i)))
@@ -11,11 +11,11 @@
     (lit 0)
 )
 
-(define int sum : list int a :
+(define int sum : list int a int size :
     (val int csum (lit 0))
 
     (loop (val int i (lit 0))
-          (call < : (get i) (lit 16384))
+          (call < : (get i) (get size))
           (set i (call + : (get i) (lit 1)))
     do
         (val int ai (list_at a (get i)))
@@ -28,23 +28,25 @@
 (define int main : :
     (call srand : (call time : (lit 0)))
 
-    (list int a (lit 16384))
-    (list int b (lit 16384))
-    (list int c (lit 16384))
+    (val int size (lit 16384))
+
+    (list int a (get size))
+    (list int b (get size))
+    (list int c (get size))
 
     (loop (val int i (lit 0))
-          (call < : (get i) (lit 16384))
+          (call < : (get i) (get size))
           (set i (call + : (get i) (lit 1)))
     do
-        (list_set a (get i) (call % : (call rand : ) (lit 16384)))
-        (list_set b (get i) (call % : (call rand : ) (lit 16384)))
+        (list_set a (get i) (call % : (call rand : ) (get size)))
+        (list_set b (get i) (call % : (call rand : ) (get size)))
     )
 
-    (call add_lists : (get a) (get b) (get c))
+    (call add_lists : (get a) (get b) (get c) (get size))
 
-    (val int sum_a (call sum : (get a)))
-    (val int sum_b (call sum : (get b)))
-    (val int sum_c (call sum : (get c)))
+    (val int sum_a (call sum : (get a) (get size)))
+    (val int sum_b (call sum : (get b) (get size)))
+    (val int sum_c (call sum : (get c) (get size)))
 
     (call print : (lit 'sum a: %d\n') (get sum_a))
     (call print : (lit 'sum b: %d\n') (get sum_b))

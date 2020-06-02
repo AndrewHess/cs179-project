@@ -527,6 +527,9 @@ class Generator:
             like semi-colons and newlines, are not added.
         '''
 
+        def sub_expr_str(expr):
+            return f'{self.__translate_expr(expr, end=False)[0]}'
+
         cpp = ''
         cuda = ''
 
@@ -535,8 +538,9 @@ class Generator:
         cuda_kernel_name = f'cuda_loop{self._para_loop_ind}_kernel'
 
         # Determine the number of blocks and threads to use.
-        threads_per_block = min(512, expr.iterations)
-        blocks = min(32, math.ceil(expr.iterations / threads_per_block))
+        iters_str = sub_expr_str(expr.iterations)
+        threads_per_block = f'min(512, {iters_str})'
+        blocks = f'min(32, 1 + {iters_str} / {threads_per_block})'
 
         # Setup the function to call the kernel.
         args = []
@@ -561,17 +565,18 @@ class Generator:
         dev_vars = []
         for var_name in expr.used_vars:
             dev_name = f'dev_{var_name}'
-            dev_vars.append(dev_name)
             var_type = expr.env.lookup_variable(expr.loc, var_name)
 
             if var_type == Type.INT or var_type == Type.FLOAT:
-                pass
+                dev_vars.append(var_name)
             elif var_type == Type.LIST_INT:
+                dev_vars.append(dev_name)
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
                 #       function.
-                size = expr.start_index + expr.iterations
-                size_str = f'{size} * sizeof(int)'
+                size_str = f'({sub_expr_str(expr.start_index)} + '
+                size_str += f'{sub_expr_str(expr.iterations)})'
+                size_str += f' * sizeof(int)'
 
                 # Allocate memory.
                 cuda_body += f'int *{dev_name};\n'
@@ -581,11 +586,14 @@ class Generator:
                 cuda_body += f'cudaMemcpy({dev_name}, {var_name}, {size_str}, '
                 cuda_body += f'cudaMemcpyHostToDevice);\n'
             elif var_type == Type.LIST_FLOAT:
+                dev_vars.append(dev_name)
+
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
                 #       function.
-                size = expr.start_index + expr.iterations
-                size_str = f'{size} * sizeof(float)'
+                size_str = f'({sub_expr_str(expr.start_index)} + '
+                size_str += f'{sub_expr_str(expr.iterations)})'
+                size_str += f' * sizeof(float)'
 
                 # Allocate memory.
                 cuda_body += f'float *{dev_name};\n'
@@ -615,8 +623,9 @@ class Generator:
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
                 #       function.
-                size = expr.start_index + expr.iterations
-                size_str = f'{size} * sizeof(int)'
+                size_str = f'({sub_expr_str(expr.start_index)} + '
+                size_str += f'{sub_expr_str(expr.iterations)})'
+                size_str += f' * sizeof(int)'
 
                 # Copy the data from host to device.
                 cuda_body += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
@@ -625,8 +634,9 @@ class Generator:
                 # TODO: use the actual size of the list. This can be a little
                 #       difficult becuase the list could be passed through a
                 #       function.
-                size = expr.start_index + expr.iterations
-                size_str = f'{size} * sizeof(float)'
+                size_str = f'({sub_expr_str(expr.start_index)} + '
+                size_str += f'{sub_expr_str(expr.iterations)})'
+                size_str += f' * sizeof(float)'
 
                 # Copy the data from host to device.
                 cuda_body += f'cudaMemcpy({var_name}, {dev_name}, {size_str}, '
@@ -660,7 +670,7 @@ class Generator:
         cuda_kernel += f'threadIdx.x;\n\n'
 
         # Loop over all indices that this thread is responsible for.
-        cuda_kernel += f'    while ({index} < {expr.iterations}) {"{"}\n'
+        cuda_kernel += f'    while ({index} < {iters_str}) {"{"}\n'
 
         for e in expr.body:
             (c, _) = self.__translate_expr(e);
@@ -675,7 +685,7 @@ class Generator:
         return (cpp, cuda)
 
 
-    def generate(self, try_parallelize=True):
+    def generate(self, try_parallelize):
         '''
         Get the parsed code from the input file and write equivalent C++ and
         CUDA code to the output file.
@@ -759,7 +769,7 @@ class Generator:
         m += f'CUDAFLAGS = -g -dc -Wno-deprecated-gpu-targets --std=c++11 \\\n'
         m += f'            --expt-relaxed-constexpr\n'
         m += f'CUDA_LINK_FLAGS = -dlink -Wno-deprecated-gpu-targets\n'
-        m += '\n'
+        m += f'\n'
         m += f'GPP=g++\n'
         m += f'CXXFLAGS = -g -Wall -D_REENTRANT -std=c++0x -pthread\n'
         m += f'INCLUDE = -I$(CUDA_INC_PATH)\n'
@@ -781,7 +791,7 @@ class Generator:
         m += f'\n'
         m += f'clean:\n'
         m += f'\trm -f {base_name} *.o\n'
-        m += '\n'
+        m += f'\n'
         m += f'full_clean: clean\n'
         m += f'\trm -f {cpp_name} {hpp_name} {cu_name} {cuh_name} Makefile\n'
         m += f'\n'

@@ -235,15 +235,21 @@ class Analyzer:
 
         # Determine the number of iterations.
         index_name = None
-        start = None
-        end = None
+        start_val_expr = None
+        end_val_expr = None
 
-        # Get the start value.
-        if expr.init.exprClass != ExprEnum.CREATE_VAR:
+        referenced_variables = []
+
+        # Get the start expression.
+        if expr.init.exprClass != ExprEnum.CREATE_VAR and \
+           expr.init.exprClass != ExprEnum.SET_VAR:
             return
-        if expr.init.val.exprClass != ExprEnum.LITERAL:
+        if expr.init.val.exprClass == ExprEnum.GET_VAR:
+            referenced_variables.append(expr.init.val.name)
+        elif expr.init.val.exprClass != ExprEnum.LITERAL:
             return
-        start = expr.init.val.val
+
+        start_val_expr = expr.init.val
         index_name = expr.init.name
 
         # Determine the stop criterion.
@@ -258,24 +264,56 @@ class Analyzer:
         # been caught by the type checker, so this code is not reached.
         assert(len(expr.test.params) == 2)
 
-        # The comparison should be between a literal and the loop index.
-        test_end_val = None
-        test_var_name = None
+        def flip_inequality(inequality):
+            if inequality == '<':
+                return '>'
+            elif inequality == '>':
+                return '<'
+            elif inequality == '<=':
+                return '>='
+            elif inequality == '>=':
+                return '<='
+            else:
+                return inequality
+
+        # The comparison should be between the loop index and either or literal
+        # or a variable. Store the end expression, which is the expression in
+        # the test that does not use the index. The end expression may have to
+        # be updated if the test uses something like '<=' instead of '<'.
+        test_lit_val = None
+        test_vars_names = [None, None]
         for i in range(2):
             if expr.test.params[i].exprClass == ExprEnum.LITERAL:
-                test_end_val = expr.test.params[i].val
+                if test_lit_val is not None:
+                    # We already read a literal, so the comparison is between
+                    # two literals and isn't worth parallelizing.
+                    return
+
+                test_lit_val = expr.test.params[i].val
+                end_val_expr = expr.test.params[i]
             elif expr.test.params[i].exprClass == ExprEnum.GET_VAR:
-                test_var_name = expr.test.params[i].name
+                test_vars_names[i] = expr.test.params[i].name
 
-        if test_end_val is None or test_var_name is None:
+                if expr.test.params[i].name is not index_name:
+                    end_val_expr = expr.test.params[i]
+                    referenced_variables.append(expr.test.params[i].name)
+                elif expr.test.params[i].name == index_name and i == 1:
+                    # Flip the inequality so that instead of something like
+                    # `10 > index', we get `index < 10'.
+                    test_call_name = flip_inequality(test_call_name)
+            else:
+                # Something unexpected was found.
+                return
+
+        # Exactly 2 non-None values should be in test_vars_names and
+        # test_lit_val combined.
+        combined = [test_lit_val] + test_vars_names
+        if sum([0 if x is None else 1 for x in combined]) != 2:
             return
 
-        if test_var_name is not index_name:
+        # The test should involve the index variable.
+        if index_name not in test_vars_names:
             return
-
-        # Set an approximate end value. This may need to be udpated if the
-        # test uses something like '<=' instead of '<'.
-        end = test_end_val
 
         # The update should be addition or subtraction of a literal from the
         # loop index.
@@ -325,14 +363,24 @@ class Analyzer:
         # Determine the number of iterations. The current implementation
         # requires that udpate_val is 1.
         if test_call_name == '<=' and update_call_name == '+':
-            end += 1
+            # Increment end_val_expr.
+            one_expr = Literal(end_val_expr.loc, Type.INT, 1)
+            end_val_expr = Call(end_val_expr.loc, '+', [end_val_expr, one_expr])
         elif test_call_name == '>=' and update_call_name == '-':
-            end -= 1
+            # Decrement end_val_expr.
+            one_expr = Literal(end_val_expr.loc, Type.INT, 1)
+            end_val_expr = Call(end_val_expr.loc, '-', [end_val_expr, one_expr])
 
-        iters = abs(start - end)
+        iters = None
+        if update_call_name == '+':
+            iters = Call(end_val_expr.loc, '-', [end_val_expr, start_val_expr])
+        else:
+            assert(update_call_name == '-')
+            iters = Call(end_val_expr.loc, '-', [start_val_expr, end_val_expr])
 
-        if iters == 0:
-            return
+            # We want to start the parallelized iterations at the lowest index,
+            # for simplicity.
+            start_val_expr = end_val_expr
 
         # Make sure the index is not set inside the loop.
         all_sets = []
@@ -359,11 +407,13 @@ class Analyzer:
         # Determine the variables that are used but not created by the loop.
         (used_variables, _) = self.__deep_used_not_created(expr, [])
 
-        # Since the loop is parallelized we can choose to start at the lowest
-        # index for simplicity in generating the CUDA code.
-        start = min(start, end)
-        parallel_loop = ParallelLoop(expr.loc, index_name, start, iters,
-                                     used_variables, expr.body)
+        for var in referenced_variables:
+            if var not in used_variables:
+                used_variables.append(var)
+
+        # Create the parallelized loop expression.
+        parallel_loop = ParallelLoop(expr.loc, index_name, start_val_expr,
+                                     iters, used_variables, expr.body)
         parallel_loop.env = expr.env
 
         return parallel_loop
