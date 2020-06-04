@@ -56,8 +56,9 @@ class TypeChecker:
             error_str = f'unknown expression type: {expr.exprClass}'
             raise error.InternalError(expr.loc, error_str)
 
-        # Set the environment for this expressions.
-        expr.env = self._env.copy()
+        # Set the environment for this expressions if it was not already set.
+        if expr.env is None:
+            expr.env = self._env.copy()
 
 
     def __validate_literal_expr_type(self, expr):
@@ -156,6 +157,7 @@ class TypeChecker:
         self.__validate_type_of_expr(ret_expr.loc, func_type[0], ret_expr)
 
         # The function body scope ended.
+        expr.env = self._env.copy()
         self._env.pop_scope(expr.loc)
 
 

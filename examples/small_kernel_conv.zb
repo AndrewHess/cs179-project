@@ -1,0 +1,112 @@
+(define int small_conv : list int data list int convolver list int output :
+    (loop (val int i (get convolver.size))
+          (call < : (get i) (get data.size))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (loop (val int k (lit 0))
+              (call < : (get k) (get convolver.size))
+              (set k (call + : (get k) (lit 1)))
+        do
+            (val int input_val (list_at data (call - : (get i) (get k))))
+            (val int conv_val (list_at convolver (get k)))
+            (val int delta (call * : (get input_val) (get conv_val)))
+
+            (val int old (list_at output (get i)))
+            (list_set output (get i) (call + : (get old) (get delta)))
+        )
+    )
+
+    (lit 0)
+)
+
+
+(define int no_parallel_small_conv : list int data list int convolver list int output :
+    (val int var_to_disallow_parallelization (lit -1))
+
+    (loop (val int i (get convolver.size))
+          (call < : (get i) (get data.size))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (loop (val int k (lit 0))
+              (call < : (get k) (get convolver.size))
+              (set k (call + : (get k) (lit 1)))
+        do
+            (val int input_val (list_at data (call - : (get i) (get k))))
+            (val int conv_val (list_at convolver (get k)))
+            (val int delta (call * : (get input_val) (get conv_val)))
+
+            (val int old (list_at output (get i)))
+            (list_set output (get i) (call + : (get old) (get delta)))
+        )
+
+        (set var_to_disallow_parallelization (get i))
+    )
+
+    (lit 0)
+)
+
+
+(define int lists_equal : list int a list int b :
+    (val int equal (lit 1))
+    (val int dummy (lit 0))
+
+    (if (call != : (get a.size) (get b.size)) then
+        (set equal (lit 0))
+    else
+        (loop (val int i (lit 0))
+              (call < : (get i) (get a.size))
+              (set i (call + : (get i) (lit 1)))
+        do
+            (if (call != : (list_at a (get i)) (list_at b (get i))) then
+                (set equal (lit 0))
+            else
+                (set dummy (lit 0))
+            )
+        )
+    )
+
+    (get equal)
+)
+
+(define int main : :
+    (val int data_size (lit 10000))
+
+    (list int data (get data_size))
+    (list int conv (lit 11))
+
+    (call srand : (lit 0))
+    (loop (val int i (lit 0))
+          (call < : (get i) (get data.size))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (list_set data (get i) (call % : (call rand :) (lit 100)))
+    )
+    (loop (val int i (lit 0))
+          (call < : (get i) (get conv.size))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (list_set conv (get i) (call % : (call rand :) (lit 100)))
+    )
+
+    (list int output1 (get data_size))
+    (list int output2 (get data_size))
+
+    (loop (val int i (lit 0))
+          (call < : (get i) (get data_size))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (list_set output1 (get i) (lit 0))
+        (list_set output2 (get i) (lit 0))
+    )
+
+    (call small_conv : (get data) (get conv) (get output1))
+    (call no_parallel_small_conv : (get data) (get conv) (get output2))
+
+    (if (call lists_equal : (get output1) (get output2)) then
+        (call print : (lit 'small convolution test passed!\n'))
+    else
+        (call print : (lit 'small convolution test FAILED\n'))
+    )
+
+    (lit 0)
+)
