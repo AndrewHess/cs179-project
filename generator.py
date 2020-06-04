@@ -628,13 +628,13 @@ class Generator:
                 size = f'{var_name}.size * sizeof(int)'
 
                 # Copy the data from host to device.
-                cuda_body += f'cudaMemcpy({var_name}, {data_name}, {size}, '
+                cuda_body += f'cudaMemcpy({var_name}.data, {data_name}, {size}, '
                 cuda_body += f'cudaMemcpyDeviceToHost);\n'
             elif var_type == Type.LIST_FLOAT:
                 size = f'{var_name}.size * sizeof(float)'
 
                 # Copy the data from host to device.
-                cuda_body += f'cudaMemcpy({var_name}, {data_name}, {size}, '
+                cuda_body += f'cudaMemcpy({var_name}.data, {data_name}, {size}, '
                 cuda_body += f'cudaMemcpyDeviceToHost);\n'
             elif var_type == Type.STRING or var_type == Type.LIST_STRING:
                 error_str = 'strings not yet allowed in parallelization'
