@@ -139,13 +139,13 @@ class PrimFunc(Expr):
 
 
 class ParallelLoop(Expr):
-    def __init__(self, _loc, _index_name, _start_index, _iterations,
+    def __init__(self, _loc, _index_name, _start_index, _end_index,
                  _used_vars, _body):
         self.exprClass = ExprEnum.PARA_LOOP
         self.loc = _loc                     # Type Location
         self.index_name = _index_name       # Type string
         self.start_index = _start_index     # Type Expr
-        self.iterations = _iterations       # Type Expr
+        self.end_index = _end_index         # Type Expr
         self.used_vars = _used_vars         # List of strings (names)
         self.body = _body                   # Type list of Expr's
         self.type = Type.NONE               # A Loop expression has no type

@@ -364,8 +364,9 @@ class Analyzer:
 
         # TODO: check for infinite loops.
 
-        # Determine the number of iterations. The current implementation
-        # requires that udpate_val is 1.
+        # Determine the end value expression so that the parallel loop can go
+        # from the start index value (inclusive) to the end index value
+        # (excusive).
         if test_call_name == '<=' and update_call_name == '+':
             # Increment end_val_expr.
             one_expr = Literal(end_val_expr.loc, Type.INT, 1)
@@ -375,16 +376,12 @@ class Analyzer:
             one_expr = Literal(end_val_expr.loc, Type.INT, 1)
             end_val_expr = Call(end_val_expr.loc, '-', [end_val_expr, one_expr])
 
-        iters = None
-        if update_call_name == '+':
-            iters = Call(end_val_expr.loc, '-', [end_val_expr, start_val_expr])
-        else:
-            assert(update_call_name == '-')
-            iters = Call(end_val_expr.loc, '-', [start_val_expr, end_val_expr])
-
+        if update_call_name == '-':
             # We want to start the parallelized iterations at the lowest index,
             # for simplicity.
+            tmp = start_val_expr
             start_val_expr = end_val_expr
+            end_val_expr = tmp
 
         # Make sure the index is not set inside the loop.
         all_sets = []
@@ -432,7 +429,7 @@ class Analyzer:
 
         # Create the parallelized loop expression.
         parallel_loop = ParallelLoop(expr.loc, index_name, start_val_expr,
-                                     iters, used_variables, expr.body)
+                                     end_val_expr, used_variables, expr.body)
         parallel_loop.env = expr.env
 
         return parallel_loop

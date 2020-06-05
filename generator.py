@@ -548,7 +548,8 @@ class Generator:
         cuda_kernel_name = f'cuda_loop{self._para_loop_ind}_kernel'
 
         # Determine the number of blocks and threads to use.
-        iters_str = sub_expr_str(expr.iterations)
+        iters_str = f'({sub_expr_str(expr.end_index)} - ' + \
+                    f'{sub_expr_str(expr.start_index)})'
         threads_per_block = f'min(512, {iters_str})'
         blocks = f'min(32, 1 + {iters_str} / {threads_per_block})'
 
@@ -662,10 +663,11 @@ class Generator:
         # Determine the index in the loop.
         index = expr.index_name
         cuda_kernel += f'    int {index} = blockIdx.x * blockDim.x + '
-        cuda_kernel += f'threadIdx.x;\n\n'
+        cuda_kernel += f'threadIdx.x + {sub_expr_str(expr.start_index)};\n\n'
 
         # Loop over all indices that this thread is responsible for.
-        cuda_kernel += f'    while ({index} < {iters_str}) {"{"}\n'
+        max_index = sub_expr_str(expr.end_index)
+        cuda_kernel += f'    while ({index} < {max_index}) {"{"}\n'
 
         for e in expr.body:
             (c, _) = self.__translate_expr(e);
