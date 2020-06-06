@@ -6,6 +6,7 @@ class Analyzer:
 
     def __init__(self, _parsed_exprs):
         self.parsed_exprs = _parsed_exprs  # Type list of Expr's
+        self.parallelized = False
 
 
     def __deep_find_calls(self, expr):
@@ -427,6 +428,9 @@ class Analyzer:
             if var not in used_variables:
                 used_variables.append(var)
 
+        # An expression was parallelized.
+        self.parallelized = True
+
         # Create the parallelized loop expression.
         parallel_loop = ParallelLoop(expr.loc, index_name, start_val_expr,
                                      end_val_expr, used_variables, expr.body)
@@ -489,7 +493,12 @@ class Analyzer:
 
 
     def analyze(self):
-        ''' Try to parallelize each expressions. '''
+        '''
+        Try to parallelize each expression. Return true if something was
+        parallelized.
+        '''
 
         for (i, e) in enumerate(self.parsed_exprs):
             self.parsed_exprs[i] = self.__deep_analyze_expr(e)
+
+        return self.parallelized

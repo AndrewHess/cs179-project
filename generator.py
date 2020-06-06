@@ -689,7 +689,11 @@ class Generator:
 
         If the try_parallelize parameter is false, the code is just converted
         to C++ without any CUDA code to parallelize it.
+
+        Return true if the code was parallelized and false otherwise.
         '''
+
+        parallelized = False  # Nothing was parallelized so far.
 
         # Get the parsed versino of the code.
         p = Parser(self.in_filename)  # Type list of Expr's
@@ -707,36 +711,48 @@ class Generator:
                 # Analyze the code to see if some parts can be marked to run in
                 # parallel.
                 analyzer = Analyzer(parsed_exprs)
-                analyzer.analyze()
+                parallelized = analyzer.analyze()
         except error.Error as e:
             e.print()
             exit(1)
 
         # Include some useful libraries.
         cpp_file = open(self._filename_no_ext + '.cpp', 'w')
-        cpp_file.write('#include <cuda_runtime.h>\n')
+
+        if parallelized:
+            cpp_file.write('#include <cuda_runtime.h>\n')
+
         cpp_file.write('#include <stdio.h>\n')
         cpp_file.write('#include <stdlib.h>\n')
         cpp_file.write('#include <time.h>\n')
         cpp_file.write('\n')
         cpp_file.write(f'#include "{self._base_filename_no_ext + ".hpp"}"\n')
-        cpp_file.write(f'#include "{self._base_filename_no_ext + ".cuh"}"\n')
+
+        if parallelized:
+            cpp_file.write(f'#include "{self._base_filename_no_ext}.cuh"\n')
         cpp_file.write('\n')
 
-        cuda_file = open(self._filename_no_ext + '.cu', 'w')
-        cuda_file.write('#include <cuda_runtime.h>\n')
-        cuda_file.write('\n')
-        cuda_file.write(f'#include "{self._base_filename_no_ext + ".cuh"}"\n')
-        cuda_file.write('\n')
+        # Only make a CUDA file if necessary.
+        if parallelized:
+            cuda_file = open(self._filename_no_ext + '.cu', 'w')
+            cuda_file.write('#include <cuda_runtime.h>\n')
+            cuda_file.write('\n')
+            cuda_file.write(f'#include "{self._base_filename_no_ext}.cuh"\n')
+            cuda_file.write('\n')
 
         # Convert each expression to C++ and CUDA code, writing the result to
         # the output file.
         for expr in parsed_exprs:
             (cpp, cuda) = self.__translate_expr(expr)
             cpp_file.write(cpp)
-            cuda_file.write(cuda)
+
+            if parallelized:
+                cuda_file.write(cuda)
 
         cpp_file.close()
+
+        if parallelized:
+            cuda_file.close()
 
         # Write the C++ header file.
         hpp_file = open(self._filename_no_ext + '.hpp', 'w')
@@ -764,19 +780,23 @@ class Generator:
         hpp_file.write('\n')
 
         hpp_file.write(f'#endif\n')
+        hpp_file.close()
 
         # Write the CUDA header file.
-        cuh_file = open(self._filename_no_ext + '.cuh', 'w')
-        cuh_file.write(f'#ifndef {self._base_filename_no_ext.upper()}_CUH\n')
-        cuh_file.write(f'#define {self._base_filename_no_ext.upper()}_CUH\n\n')
+        if parallelized:
+            cuh_file = open(self._filename_no_ext + '.cuh', 'w')
+            guard = f'{self._base_filename_no_ext.upper()}_CUH'
+            cuh_file.write(f'#ifndef {guard}\n')
+            cuh_file.write(f'#define {guard}\n\n')
 
-        cuh_file.write(f'#include "{self._base_filename_no_ext + ".hpp"}"\n\n')
+            cuh_file.write(f'#include "{self._base_filename_no_ext}.hpp"\n\n')
 
-        for proto in self.cuda_prototypes:
-            cuh_file.write(proto)
-        cuh_file.write('\n')
+            for proto in self.cuda_prototypes:
+                cuh_file.write(proto)
+            cuh_file.write('\n')
 
-        cuh_file.write(f'#endif\n')
+            cuh_file.write(f'#endif\n')
+            cuh_file.close()
 
         # Write the Makefile.
         makefile = open(self._path + '/Makefile', 'w')
@@ -787,32 +807,38 @@ class Generator:
         cu_name  = self._base_filename_no_ext + '.cu'
         cuh_name = self._base_filename_no_ext + '.cuh'
         m = ''
-        m += f'CUDA_PATH = /usr/local/cuda\n'
-        m += f'CUDA_INC_PATH = $(CUDA_PATH)/include\n'
-        m += f'CUDA_BIN_PATH = $(CUDA_PATH)/bin\n'
-        m += f'CUDA_LIB_PATH = $(CUDA_PATH)/lib64\n'
-        m += f'NVCC = $(CUDA_BIN_PATH)/nvcc\n'
-        m += f'CUDAFLAGS = -g -dc -Wno-deprecated-gpu-targets --std=c++11 \\\n'
-        m += f'            --expt-relaxed-constexpr\n'
-        m += f'CUDA_LINK_FLAGS = -dlink -Wno-deprecated-gpu-targets\n'
-        m += f'\n'
+        if parallelized:
+            m += f'CUDA_PATH = /usr/local/cuda\n'
+            m += f'CUDA_INC_PATH = $(CUDA_PATH)/include\n'
+            m += f'CUDA_BIN_PATH = $(CUDA_PATH)/bin\n'
+            m += f'CUDA_LIB_PATH = $(CUDA_PATH)/lib64\n'
+            m += f'NVCC = $(CUDA_BIN_PATH)/nvcc\n'
+            m += f'CUDAFLAGS = -g -dc -Wno-deprecated-gpu-targets \\\n'
+            m += f'            --std=c++11 --expt-relaxed-constexpr\n'
+            m += f'CUDA_LINK_FLAGS = -dlink -Wno-deprecated-gpu-targets\n'
+            m += f'\n'
         m += f'GPP=g++\n'
         m += f'CXXFLAGS = -g -Wall -D_REENTRANT -std=c++0x -pthread\n'
-        m += f'INCLUDE = -I$(CUDA_INC_PATH)\n'
-        m += f'LIBS = -L$(CUDA_LIB_PATH) -lcudart -lcufft -lsndfile\n'
+        if parallelized:
+            m += f'INCLUDE = -I$(CUDA_INC_PATH)\n'
+            m += f'LIBS = -L$(CUDA_LIB_PATH) -lcudart -lcufft -lsndfile\n'
         m += f'\n'
         m += f'all: {base_name}\n'
         m += f'\n'
         m += f'{cpp_name}.o: {cpp_name}\n'
         m += f'\t$(GPP) $(CXXFLAGS) -c -o $@ $(INCLUDE) $<\n'
         m += f'\n'
-        m += f'{cu_name}.o: {cu_name}\n'
-        m += f'\t$(NVCC) $(CUDAFLAGS) -c -o $@ $<\n'
-        m += f'\n'
-        m += f'cuda.o: {cu_name}.o\n'
-        m += f'\t$(NVCC) $(CUDA_LINK_FLAGS) -o $@ $^\n'
-        m += f'\n'
-        m += f'{base_name}: {cpp_name}.o {cu_name}.o cuda.o\n'
+        if parallelized:
+            m += f'{cu_name}.o: {cu_name}\n'
+            m += f'\t$(NVCC) $(CUDAFLAGS) -c -o $@ $<\n'
+            m += f'\n'
+            m += f'cuda.o: {cu_name}.o\n'
+            m += f'\t$(NVCC) $(CUDA_LINK_FLAGS) -o $@ $^\n'
+            m += f'\n'
+        if parallelized:
+            m += f'{base_name}: {cpp_name}.o {cu_name}.o cuda.o\n'
+        else:
+            m += f'{base_name}: {cpp_name}.o\n'
         m += f'\t$(GPP) $(CXXFLAGS) -o $@ $(INCLUDE) $^ $(LIBS)\n'
         m += f'\n'
         m += f'clean:\n'
@@ -821,6 +847,8 @@ class Generator:
         m += f'full_clean: clean\n'
         m += f'\trm -f {cpp_name} {hpp_name} {cu_name} {cuh_name} Makefile\n'
         m += f'\n'
-        m += f'.PHONY: clean full_clean\n'
+        m += f'.PHONY: all clean full_clean\n'
 
         makefile.write(m)
+
+        return parallelized
