@@ -232,6 +232,9 @@ class Analyzer:
         self.parsed_exprs with the parallelized expression.
         '''
 
+        if expr.no_para:
+            return
+
         # Do not parallelize a loop that uses rand() because running in
         # parallel vs sequential could cause different results, which is very
         # unintuitive if a fixed seed is used.
@@ -391,16 +394,6 @@ class Analyzer:
 
         if index_name in all_sets:
             return
-
-        # # If a non-list variable is set inside the loop, then the loop cannot
-        # # be parallelized (yet) due to synchronization.
-        # for x in all_sets:
-        #     print(f'analyzer looking up variable {x}')
-        #     x_type = expr.env.lookup_variable(expr.loc, x)
-        #     print(f'analyzer found variable {x}')
-        #     if x_type == Type.INT or x_type == Type.FLOAT or \
-        #        x_type == Type.STRING:
-        #         return
 
         # TODO: Do not parallelize if two iterations of the loop set the same
         #       location in any list, as this too causes race conditions.

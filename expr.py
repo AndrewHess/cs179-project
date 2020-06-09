@@ -90,7 +90,7 @@ class If(Expr):
 
 
 class Loop(Expr):
-    def __init__(self, _loc, _init, _test, _update, _body):
+    def __init__(self, _loc, _init, _test, _update, _body, _no_para):
         self.exprClass = ExprEnum.LOOP
         self.loc = _loc         # Type Location
         self.init = _init       # Type Expr
@@ -98,6 +98,7 @@ class Loop(Expr):
         self.update = _update   # Type Expr
         self.body = _body       # Type list of Expr's
         self.type = Type.NONE   # A Loop expression has no type
+        self.no_para = _no_para # True if parallelization should not be tried.
 
 
 class List(Expr):

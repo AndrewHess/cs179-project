@@ -6,7 +6,7 @@ from type import Type
 
 # Keywords cannot be used for function/variable names etc.
 keywords = ['lit', 'val', 'set', 'get', 'define', 'call', 'if', 'then', 'else',
-            'loop', 'do', 'list']
+            'loop', 'seq_loop', 'do', 'list', 'list_at', 'list_set']
 
 
 class Parser:
@@ -191,8 +191,8 @@ class Parser:
             return self.__parse_call(start_point_loc)
         elif word == 'if':
             return self.__parse_if(start_point_loc)
-        elif word == 'loop':
-            return self.__parse_loop(start_point_loc)
+        elif word == 'loop' or word == 'seq_loop':
+            return self.__parse_loop(start_point_loc, word == 'seq_loop')
         elif word == 'list':
             return self.__parse_list(start_point_loc)
         elif word == 'list_at':
@@ -456,12 +456,15 @@ class Parser:
         return If(loc, if_cond, if_then, if_else)
 
 
-    def __parse_loop(self, start_point_loc):
+    def __parse_loop(self, start_point_loc, no_parallelization):
         '''
         Private function to parse a single LOOP expression. The _file
         variable should be in a state starting with (without quotes):
         '<init> <test> <update> <e1> <e2> ...)'
         That is, the '(loop ' section has alread been read.
+
+        If 'no_parallelization' is true, then the loop will not be
+        parallelized, even if it is possible to do so.
 
         Returns an instance of Loop()
         '''
@@ -488,7 +491,8 @@ class Parser:
 
         # Now the entire loop expression has been parsed.
         loc = start_point_loc.span(self.__get_point_loc())
-        return Loop(loc, loop_init, loop_test, loop_update, loop_body)
+        return Loop(loc, loop_init, loop_test, loop_update, loop_body,
+                    no_parallelization)
 
 
     def __parse_list(self, start_point_loc):

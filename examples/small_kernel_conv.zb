@@ -21,13 +21,11 @@
 
 
 (define int no_parallel_small_conv : list int data list int convolver list int output :
-    (val int var_to_disallow_parallelization (lit -1))
-
-    (loop (val int i (get convolver.size))
+    (seq_loop (val int i (get convolver.size))
           (call < : (get i) (get data.size))
           (set i (call + : (get i) (lit 1)))
     do
-        (loop (val int k (lit 0))
+        (seq_loop (val int k (lit 0))
               (call < : (get k) (get convolver.size))
               (set k (call + : (get k) (lit 1)))
         do
@@ -38,8 +36,6 @@
             (val int old (list_at output (get i)))
             (list_set output (get i) (call + : (get old) (get delta)))
         )
-
-        (set var_to_disallow_parallelization (get i))
     )
 
     (lit 0)
