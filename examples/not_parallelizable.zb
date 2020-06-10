@@ -1,0 +1,22 @@
+(define int main : :
+    (list int fib (lit 40))
+    (list_set fib (lit 0) (lit 1))
+    (list_set fib (lit 1) (lit 1))
+
+    (loop (val int i (lit 2))
+          (call < : (get i) (get fib.size))
+          (set i (call + : (get i) (lit 1)))
+    do
+        (val int a (list_at fib (call - : (get i) (lit 1))))
+        (val int b (list_at fib (call - : (get i) (lit 2))))
+        (list_set fib (get i) (call + : (get a) (get b)))
+    )
+
+    (if (call != : (list_at fib (lit 39)) (lit 102334155)) then
+        (call print : (lit 'not_parallelizable FAILED: incorrect list value'))
+    else
+        (call print : (lit ''))
+    )
+
+    (lit 0)
+)

@@ -71,8 +71,11 @@ class Analyzer:
 
     def __deep_find_sets(self, expr):
         '''
-        Return a list of names of every variable set directly or indirectly by
-        the given expression.
+        Return a list of tuples where the first element of each tuple is the
+        name of the variable set and the second element is either None if the
+        variable is not a list or the expression of the index into the list if
+        the variable is a list. The returned list indicates every variable that
+        is set either directly or indirectly by the provided expression.
         '''
 
         if expr.exprClass == ExprEnum.LITERAL:
@@ -80,7 +83,7 @@ class Analyzer:
         elif expr.exprClass == ExprEnum.CREATE_VAR:
             return self.__deep_find_sets(expr.val)
         elif expr.exprClass == ExprEnum.SET_VAR:
-            return [expr.name] + self.__deep_find_sets(expr.val)
+            return [(expr.name, None)] + self.__deep_find_sets(expr.val)
         elif expr.exprClass == ExprEnum.GET_VAR:
             return []
         elif expr.exprClass == ExprEnum.DEFINE:
@@ -118,10 +121,74 @@ class Analyzer:
         elif expr.exprClass == ExprEnum.LIST_AT:
             return self.__deep_find_sets(expr.index)
         elif expr.exprClass == ExprEnum.LIST_SET:
-            sets = self.__deep_find_sets(expr.index)
+            sets = [(expr.name, expr.index)]
+            sets += self.__deep_find_sets(expr.index)
             sets += self.__deep_find_sets(expr.val)
 
             return sets
+        elif expr.exprClass == ExprEnum.PRIM_FUNC:
+            return []
+        else:
+            error_str = f'unknown expression type: {expr.exprClass}'
+            raise error.InternalError(expr.loc, error_str)
+
+
+    def __deep_find_list_ats(self, expr):
+        '''
+        Return a list of tuples where the first element of each tuple is the
+        name of the list and the second element is the index expression.
+        The returned list indicates every list variable that is used by list_at
+        either directly or indirectly by the provided expression.
+        '''
+
+        if expr.exprClass == ExprEnum.LITERAL:
+            return []
+        elif expr.exprClass == ExprEnum.CREATE_VAR:
+            return self.__deep_find_list_ats(expr.val)
+        elif expr.exprClass == ExprEnum.SET_VAR:
+            return self.__deep_find_list_ats(expr.val)
+        elif expr.exprClass == ExprEnum.GET_VAR:
+            return []
+        elif expr.exprClass == ExprEnum.DEFINE:
+            return []
+        elif expr.exprClass == ExprEnum.CALL:
+            # TODO: also include any list_at's called by this function.
+            list_ats = []
+
+            for e in expr.params:
+                list_ats += self.__deep_find_list_ats(e)
+
+            return list_ats
+        elif expr.exprClass == ExprEnum.IF:
+            # Include any list_at's that could possibly be called.
+            list_ats = self.__deep_find_list_ats(expr.cond)
+
+            for e in expr.then:
+                list_ats += self.__deep_find_list_ats(e)
+
+            for e in expr.otherwise:
+                list_ats += self.__deep_find_list_ats(e)
+
+            return list_ats
+        elif expr.exprClass == ExprEnum.LOOP:
+            list_ats = self.__deep_find_list_ats(expr.init)
+            list_ats += self.__deep_find_list_ats(expr.test)
+            list_ats += self.__deep_find_list_ats(expr.update)
+
+            for e in expr.body:
+                list_ats += self.__deep_find_list_ats(e)
+
+            return list_ats
+        elif expr.exprClass == ExprEnum.LIST:
+            return self.__deep_find_list_ats(expr.size)
+        elif expr.exprClass == ExprEnum.LIST_AT:
+            list_ats = [(expr.name, expr.index)]
+            return list_ats + self.__deep_find_list_ats(expr.index)
+        elif expr.exprClass == ExprEnum.LIST_SET:
+            list_ats = self.__deep_find_list_ats(expr.index)
+            list_ats += self.__deep_find_list_ats(expr.val)
+
+            return list_ats
         elif expr.exprClass == ExprEnum.PRIM_FUNC:
             return []
         else:
@@ -395,11 +462,25 @@ class Analyzer:
         if index_name in all_sets:
             return
 
-        # TODO: Do not parallelize if two iterations of the loop set the same
-        #       location in any list, as this too causes race conditions.
+        all_list_sets = filter(lambda x : x[1] is not None, all_sets)
+        all_list_ats = self.__deep_find_list_ats(expr);
 
-        # TODO: Do not parallelize if one iterations sets something in a list
-        #       and another iteration uses that list value.
+        # Check for list setting patterns that indicate the loop may not be
+        # correct if parallelized.
+        for (name1, index_expr1) in all_list_sets:
+            # Check if two different elemens of the list are set.
+            for (name2, index_expr2) in all_list_sets:
+                if name1 == name2 and not Expr.equal(index_expr1, index_expr2):
+                    # Parallelizing the loop may cause errors because two
+                    # different iterations may be setting the same element.
+                    return
+
+            for (name2, index_expr2) in all_list_ats:
+                if name1 == name2 and not Expr.equal(index_expr1, index_expr2):
+                    # Parallelizing the loop may cause errors because the
+                    # element that this list_set relies on may be set in a
+                    # different iteration.
+                    return
 
         # Determine the variables that are used but not created by the loop. If
         # a non-list variable is set inside the loop but not created in the
@@ -407,7 +488,7 @@ class Analyzer:
         # synchronization issues.
         (used_variables, _) = self.__deep_used_not_created(expr, [])
         for x in used_variables:
-            if x in all_sets:
+            if x in [s[0] for s in all_sets]:
                 x_type = expr.env.lookup_variable(expr.loc, x)
                 if  x_type == Type.INT or x_type == Type.FLOAT or \
                         x_type == Type.STRING:

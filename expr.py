@@ -25,6 +25,12 @@ class Expr:
     exprClass = Type.NONE
     env = None
 
+    def equal(self, other):
+        if self.exprClass != other.exprClass:
+            return False
+
+        return self._equal(other)
+
 
 class Literal(Expr):
     def __init__(self, _loc, _type, _val):
@@ -32,6 +38,15 @@ class Literal(Expr):
         self.loc = _loc     # Type Location
         self.type = _type   # Type Type
         self.val = _val     # Type _type
+
+
+    def _equal(self, other):
+        if self.type != other.type:
+            return False
+        if not Expr.equal(self.val, other.val):
+            return False
+
+        return True
 
 
 class CreateVar(Expr):
@@ -43,6 +58,17 @@ class CreateVar(Expr):
         self.val = _val     # Type Expr
 
 
+    def _equal(self, other):
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+        if not Expr.equal(self.val, other.val):
+            return False
+
+        return True
+
+
 class SetVar(Expr):
     def __init__(self, _loc, _name, _val):
         self.exprClass = ExprEnum.SET_VAR
@@ -52,12 +78,33 @@ class SetVar(Expr):
         self.val = _val                 # Type Expr
 
 
+    def _equal(self, other):
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+        if not Expr.equal(self.val, other.val):
+            return False
+
+        return True
+
+
+
 class GetVar(Expr):
     def __init__(self, _loc, _name):
         self.exprClass = ExprEnum.GET_VAR
         self.loc = _loc                 # Type Location
         self.name = _name               # Type string
         self.type = Type.UNDETERMINED   # Type depends on previous CREATE_VAR
+
+
+    def _equal(self, other):
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+
+        return True
 
 
 class Define(Expr):
@@ -70,6 +117,28 @@ class Define(Expr):
         self.body = _body         # Type list of Expr's
 
 
+    def _equal(self, other):
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+        if len(self.args) != len(other.args):
+            return False
+
+        for (a1, a2) in zip(self.args, other.args):
+            if a1[0] != a2[0] or a1[1] != a2[1]:
+                return False
+
+        if len(self.body) != len(other.body):
+            return False
+
+        for (b1, b2) in zip(self.body, other.body):
+            if not Expr.equal(b1, b2):
+                return False
+
+        return True
+
+
 class Call(Expr):
     def __init__(self, _loc, _name, _params):
         self.exprClass = ExprEnum.CALL
@@ -77,6 +146,19 @@ class Call(Expr):
         self.name = _name               # Type string
         self.params = _params           # Type list of Expr's
         self.type = Type.UNDETERMINED   # Type depnds on previous DEFINE
+
+
+    def _equal(self, other):
+        if self.name != other.name:
+            return False
+        if len(self.params) != len(other.params):
+            return False
+
+        for (p1, p2) in zip(self.params, other.params):
+            if not Expr.equal(p1, p2):
+                return False
+
+        return True
 
 
 class If(Expr):
@@ -87,6 +169,27 @@ class If(Expr):
         self.then = _then               # Type list of Expr's
         self.otherwise = _otherwise     # Type list of Expr's
         self.type = Type.NONE           # An If expression has no type
+
+
+    def _equal(self, other):
+        if not Expr.equal(self.cond, other.cond):
+            return False
+
+        if len(self.then) != len(other.then):
+            return False
+
+        for (t1, t2) in zip(self.then, other.then):
+            if not Expr.equal(t1, t2):
+                return False
+
+        if len(self.otherwise) != len(other.otherwise):
+            return False
+
+        for (t1, t2) in zip(self.otherwise, other.otherwise):
+            if not Expr.equal(t1, t2):
+                return False
+
+        return True
 
 
 class Loop(Expr):
@@ -101,6 +204,26 @@ class Loop(Expr):
         self.no_para = _no_para # True if parallelization should not be tried.
 
 
+    def _equal(self, other):
+        if not Expr.equal(self.init, other.init):
+            return False
+        if not Expr.equal(self.test, other.test):
+            return False
+        if not Expr.equal(self.update, other.update):
+            return False
+        if not Expr.equal(self.no_para, other.no_para):
+            return False
+
+        if len(self.body) != len(other.body):
+            return False
+
+        for (b1, b2) in zip(self.body, other.body):
+            if not Expr.equal(b1, b2):
+                return False
+
+        return True
+
+
 class List(Expr):
     def __init__(self, _loc, _elem_type, _name, _size):
         self.exprClass = ExprEnum.LIST
@@ -111,6 +234,17 @@ class List(Expr):
         self.type = Type.UNDETERMINED   # Type depends on _elem_type
 
 
+    def _equal(self, other):
+        if self.elem_type != other.elem_type:
+            return False
+        if self.name != other.name:
+            return False
+        if not Expr.equal(self.size, other.size):
+            return False
+
+        return True
+
+
 class ListAt(Expr):
     def __init__(self, _loc, _list, _index):
         self.exprClass = ExprEnum.LIST_AT
@@ -118,6 +252,15 @@ class ListAt(Expr):
         self.name = _list               # Type string; the name of the list
         self.index = _index             # Type Expr; should evaluate to an int
         self.type = Type.UNDETERMINED   # Type depends on previous LIST
+
+
+    def _equal(self, other):
+        if self.name != other.name:
+            return False
+        if not Expr.equal(self.index, other.index):
+            return False
+
+        return True
 
 
 class ListSet(Expr):
@@ -130,6 +273,17 @@ class ListSet(Expr):
         self.type = Type.NONE   # Type depends on previous LIST
 
 
+    def _equal(self, other):
+        if self.name != other.name:
+            return False
+        if not Expr.equal(self.index, other.index):
+            return False
+        if not Expr.equal(self.val, other.val):
+            return False
+
+        return True
+
+
 class PrimFunc(Expr):
     def __init__(self, _loc, _return_type, _name, _arg_types):
         self.exprClass = ExprEnum.PRIM_FUNC
@@ -137,6 +291,22 @@ class PrimFunc(Expr):
         self.type = _return_type    # Type Type
         self.name = _name           # Type string
         self.arg_types = _arg_types # Type list of Type's for argument types
+
+
+    def _equal(self, other):
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+
+        if len(self.arg_types) != len(other.arg_types):
+            return False
+
+        for (a1, a2) in zip(self.arg_types, other.arg_types):
+            if a1 != a2:
+                return False
+
+        return True
 
 
 class ParallelLoop(Expr):
@@ -150,3 +320,27 @@ class ParallelLoop(Expr):
         self.used_vars = _used_vars         # List of strings (names)
         self.body = _body                   # Type list of Expr's
         self.type = Type.NONE               # A Loop expression has no type
+
+
+    def _equal(self, other):
+        if self.index_name != other.index_name:
+            return False
+        if not Expr.equal(self.start_index, other.start_index):
+            return False
+        if not Expr.equal(self.end_index, other.end_index):
+            return False
+        if len(self.used_vars) != len(other.used_vars):
+            return False
+
+        for (v1, v2) in zip(self.used_vars, other.used_vars):
+            if v1 != v2:
+                return False
+
+        if len(self.body) != len(other.body):
+            return False
+
+        for (b1, b2) in zip(self.body, other.body):
+            if not Expr.equal(b1, b2):
+                return False
+
+        return True
