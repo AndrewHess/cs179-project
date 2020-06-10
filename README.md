@@ -1,11 +1,43 @@
 # cs179-project
 
 ## Overview
-The ```main.py``` file takes a .zb code file and a boolean for whether the code should be parallelized if it is possible. Then the code is converted to C++ (and CUDA, if parts are parallelized), a Makefile is generated, the code is compiled, and finally executed.
+The ```main.py``` file takes a .zb code file and a boolean for whether the code should be parallelized if it is possible. Then the code is converted to C++ (and CUDA, if parts are automatically parallelized), a Makefile is generated, the code is compiled, and finally executed.
 
 
 ## Motivation
 While running code on a GPU can be very beneficial due to the potential speedup, translating sequential code into CUDA code to actually run a parallel job on a GPU can be tedious and error prone. This project automatically converts loops that satisfy certain parallelization requirements into their parallel equivalent so that the programmer is freed from the burden of checking the correctness of the basic conversions from CPU to GPU code. Additionally, writing sequential code is often easier and faster than writing parallelized code, so automatically converting the programmer's sequential code into CUDA as appropriate saves the programmer time.
+
+
+## Demo
+A demo of the project can be run via ```./demo.sh``` . This runs the following files in the examples directory:
+- ```add_lists.zb```
+- ```add_lists2.zb```
+- ```small_kernel_conv.zb```
+- ```not_parallelizable.zb```
+
+All of these programs are run first without parallelization and then with attempted parallelization. The demo script ensures that all of the programs except for ```not_parallelizable.zb``` are in fact parallelized when they are run with attempted parallelization.
+
+The output of running ```./demo.sh``` is:
+```
+running tests without parallelization ...
+add_lists test passed!
+add_lists2 test passed!
+small_kernel_conv test passed!
+not_parallelizable passed!
+
+running tests with parallelization ...
+add_lists test passed!
+add_lists2 test passed!
+small_kernel_conv test passed!
+not_parallelizable passed!
+```
+
+The ```add_lists.zb``` and ```add_lists2.zb``` tests both generate two random lists (with the same length) of integers and then add the lists together into a third list and make sure that the result is the same as the what the CPU code obtained. The ```small_kernel_conv.zb``` test generates a large random list of integers and a small random list of integers and then convolves them, and checks that the result is the same as obtained by the CPU code. The ```not_parallelizable.zb``` test generates the first 40 fibonacci numbers in a list, but the demo script ensures that this script is not parallelized even when attempted parallelization is turned on. The script is not able to be parallelized because generating each consecutive element in the list requires that the previous two elements are correct.
+
+After running the demo, the created C++ and CUDA files can be inspected in
+the ```examples``` directory; only the parallelized versions will persist after
+the demo, but the non-parallelized versions can be viewed by disabling the
+second half of the demo script and then rerunning the demo.
 
 
 ## Algorithms Overview
@@ -43,7 +75,7 @@ In the current version of the project, there are no GPU optimizations; shared me
 ## Code Structure
 The most important files are ```main.py```, ```parser.py```, ```analyzer.py```, ```generator.py```,  ```demo.sh```, and the example programs in the ```examples``` directory. As described above, the parser, analyzer, and generator are responsible for parsing the input code, determining whether loops can be parallelized, and outputing equivalent C++ and CUDA code as necessary along with a Makefile. The ```main.py``` program combines these tasks to translate a given code file into equivalent C++ and CUDA code, build an executable, and run the executable. The demo script then invokes the main program several times on the example scripts to ensure that they all pass.
 
-## Running a single Program
+## Running a Single Program
 The ```main.py``` program has the usage ```main.py <code_file> <parallelize> [should_parallelize]```, where ```<code_file>``` specifies the .zb code to translate, ```<parallelize>``` is either 0 (do not parallelize the code) or 1 (parallelize the code if possible), and ```[should_parallelize]``` is also 0 or 1 and the test fails if its value disagrees with whether the provided code actually was parallelized (```should_parallelize``` is mainly useful for testing).
 
 As an example, the ```examples/add_lists.zb``` example can be run with parallelization via ```python3 main.py examples/add_lists.zb 1```.
@@ -51,7 +83,7 @@ As an example, the ```examples/add_lists.zb``` example can be run with paralleli
 If a given script is not parallelized either becuase the main program was invoked with a specification of no parallelization or because the program could not be parallelized, no CUDA code is generated and the Makefile does not make the executable depend on CUDA code. This has the benefit that non-parallelized code can be run on machines that do no have CUDA (so long as the machine has python3 and gcc).
 
 
-## Syntax
+## Language Syntax
 ### Types
 Every variable must be an integer, floating point number, string, or one dimensional array of one of those types. However, in the current version, strings should only be used as literals (for instance, to print), and floating point numbers are currently lacking many primitive functions, such as addition. Thus, most programs will only use ints, lists of ints, and literal strings. Lists can only contain elements a single type.
 
@@ -155,17 +187,3 @@ However, there is not currently support for similar functions for floating point
 
 Printing follows the same method as is used in C, where you specify a format string and then provide additional arguments are required by the format string. For example, if ```x``` is an int with value 5, ```y``` is a float with value 4.51 and ```z``` is a string with value 'hello', then ```(call print : (lit '%s world! (%d) %f') (get z) (get x) (get y))\n``` would print the string 'hello world! (5) 4.51' and terminate with a newline.
 
-
-## Demo
-A demo of the project can be run via ```./demo.sh``` . This takes the
-script ```examples/add_lists.zb``` and converts it into C++ and CUDA code, and
-then compiles and runs the converted code and checks that the output is as
-expected. The demo first runs the test without trying to parallelize any loops
-and just converts the script to the equivalent C++ code. Afterwards, the test
-is rerun but some loops are converted into parallel versions via CUDA to run on
-the GPU.
-
-After running the demo, the created C++ and CUDA files can be inspected in
-the ```examples``` directory; only the parallelized versions will persist after
-the demo, but the non-parallelized versions can be viewed by disabling the
-second half of the demo script and then rerunning the demo.
