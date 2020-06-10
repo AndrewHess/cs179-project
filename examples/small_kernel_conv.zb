@@ -99,9 +99,9 @@
     (call no_parallel_small_conv : (get data) (get conv) (get output2))
 
     (if (call lists_equal : (get output1) (get output2)) then
-        (call print : (lit 'small convolution test passed!\n'))
+        (call print : (lit 'small_kernel_conv test passed!\n'))
     else
-        (call print : (lit 'small convolution test FAILED\n'))
+        (call print : (lit 'small_kernel_conv test FAILED\n'))
     )
 
     (lit 0)

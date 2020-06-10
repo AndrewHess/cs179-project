@@ -6,13 +6,16 @@ import sys
 
 
 def usage(filename):
-    print(f'usage: {filename} code_file parallelize')
+    print(f'usage: {filename} code_file parallelize [should_parallelize]')
     print("`parallelize' should be 0 or 1")
+    print("`should_parallelize' should be 0 or 1 and if it is provided and " + \
+          "the code is or is not parallelized in a way that disagrees with " + \
+          "`should_parallelize' then the test fails")
     exit(-1)
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 3 and len(sys.argv) != 4:
         usage(sys.argv[0])
 
     # The first command line argument should be the script to convert to C++
@@ -20,6 +23,13 @@ def main():
     # parallelize the code, and false to just convert it to C++.
     g = Generator(sys.argv[1])
     parallelized = g.generate(int(sys.argv[2]))
+
+    # Check if the code was or was not supposed to be parallelizable but it was
+    # not or was parallelized, respectively.
+    if len(sys.argv) == 4 and int(sys.argv[3]) ^ parallelized:
+        fail_str = f'{" not" if int(sys.argv[3]) else ""} parallelized'
+        print(f'{sys.argv[1]} FAILED: it was unexpectedly{fail_str}')
+        return
 
     # The generator outputs cpp, cuda, and Makefile files, but does not run
     # `make', so do that now.

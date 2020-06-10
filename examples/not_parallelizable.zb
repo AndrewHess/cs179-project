@@ -13,9 +13,9 @@
     )
 
     (if (call != : (list_at fib (lit 39)) (lit 102334155)) then
-        (call print : (lit 'not_parallelizable FAILED: incorrect list value'))
+        (call print : (lit 'not_parallelizable FAILED: incorrect list value\n'))
     else
-        (call print : (lit ''))
+        (call print : (lit 'not_parallelizable passed!\n'))
     )
 
     (lit 0)
